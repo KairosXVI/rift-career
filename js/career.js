@@ -2,7 +2,7 @@
 (function (RC) {
   const { U, C, D, W } = RC;
   const P = {};
-  const TURNS_PRO = 51;
+  const WEEKS = 52;
 
   // ---------- Cálculos básicos ----------
   P.sub = (S) => {
@@ -169,7 +169,7 @@
     S.cal = RC.Season.buildCalendar(false);
     RC.Season.newComp(S);
     // Alcanza la fecha actual simulando el resto del mundo sin ti
-    const target = U.clamp(Math.round((month / 12) * TURNS_PRO), 0, TURNS_PRO - 5);
+    const target = U.clamp(Math.round((month / 12) * S.cal.length), 0, S.cal.length - 6);
     S.turn = 0;
     const saved = S.pl.teamId;
     S.pl.teamId = null;
@@ -217,7 +217,7 @@
   P.trainGain = function (S, attr, mult = 1) {
     const pl = S.pl;
     const v = pl.attrs[attr];
-    let g = 0.12 * P.ageMult(pl.age) * (S.amateur ? 2.2 : 1);
+    let g = 0.11 * P.ageMult(pl.age) * (S.amateur ? 2.4 : 1);
     let gear = 1 + 0.03 * P.gearLevel(S, 'pc');
     for (const it of C.GEAR) if (it.boost[attr]) gear += it.boost[attr] * P.gearLevel(S, it.id);
     g *= gear;
@@ -358,12 +358,19 @@
         st.g++; st.w += g.win ? 1 : 0; st.k += g.k; st.d += g.d; st.a += g.a; st.cs += g.cs; st.r += g.rating;
       }
       pl.stats.champs[g.champ] = (pl.stats.champs[g.champ] || 0) + 1;
+      if (g.penta) {
+        pl.stats.career.penta = (pl.stats.career.penta || 0) + 1;
+        const pf = Math.round(2000 + Math.sqrt(pl.fans) * 20);
+        pl.fans += pf;
+        news(S, `¡PENTAKILL con ${D.champName(g.champ)}! El clip arrasa en redes: +${U.num(pf)} seguidores.`, 'good');
+      }
       pl.mastery[g.champ] = U.round1(Math.min(100, P.mastery(S, g.champ) + 0.8));
       // Jugar bien también mejora (menos que entrenar)
-      const pg = (0.01 + Math.max(0, g.rating - 6.5) * 0.025) * P.ageMult(pl.age);
+      const pg = (0.003 + Math.max(0, g.rating - 6.5) * 0.009) * P.ageMult(pl.age);
       for (const a of C.ATTRS) pl.attrs[a.id] = U.round1(Math.min(99, pl.attrs[a.id] + pg * Math.max(0.1, (100 - pl.attrs[a.id]) / 30)));
       pl.energy = Math.max(0, pl.energy - 5);
       if (!bestMvp || g.rating > bestMvp.rating) bestMvp = g;
+      pl.recent = (pl.recent || []).concat([{ r: g.rating, w: g.win, c: g.champ }]).slice(-10);
     }
     const avgR = U.avg(res.games.map((g) => g.rating));
     res.mvp = won && avgR >= 8.0;
@@ -384,7 +391,7 @@
     let total = 0;
     for (const a of C.ATTRS) {
       const v = S.pl.attrs[a.id];
-      const g = amount * Math.max(0.25, (100 - v) / 25);
+      const g = amount * Math.max(0.1, (100 - v) / 40);
       S.pl.attrs[a.id] = U.round1(Math.min(99, v + g));
       total += g;
     }
@@ -442,6 +449,12 @@
       } else {
         sp.done = 0;
         sp.splits--;
+        // Si has crecido, la marca mejora el contrato
+        const v = P.sponsorValue(S) * 0.9;
+        if (sp.splits > 0 && v > sp.pay * 1.1) {
+          news(S, `${sp.name} mejora tu patrocinio: de ${U.money(sp.pay)} a ${U.money(v)} por semana.`, 'good');
+          sp.pay = Math.round(v / 10) * 10;
+        }
         if (sp.splits <= 0) {
           pl.sponsors = pl.sponsors.filter((x) => x !== sp);
           news(S, `Termina tu contrato con ${sp.name}.`);
@@ -451,12 +464,19 @@
     pl.streams = 0;
   };
 
-  P.onIntlEnd = function (S, id, name, place) {
+  // place: 1 campeón, 2 finalista, 3-4 top 4, 5-8 top 8, 9+ eliminado antes
+  P.onIntlEnd = function (S, id, name, place, stage) {
     const pl = S.pl;
     const nm = `${name} ${S.year}`;
+    const txt = place === 1 ? 'campeón' : place === 2 ? 'finalista' : place <= 4 ? 'top 4' : place <= 8 ? 'top 8' : `eliminado en ${stage || 'la fase previa'}`;
     if (place === 1) P.addTitle(S, nm, id === 'worlds' ? 400000 : id === 'msi' ? 150000 : 30000, id === 'worlds' ? 150000 : id === 'msi' ? 60000 : 8000, id === 'worlds' ? 1.2 : id === 'msi' ? 0.8 : 0.4);
-    else news(S, `${name}: terminas en ${place === 2 ? 'segunda posición' : place <= 4 ? 'semifinales' : place <= 8 ? 'cuartos de final' : 'fase de grupos'}.`, place <= 2 ? 'good' : '');
-    pl.history.push({ year: S.year, text: `${nm}: ${place === 1 ? 'campeón' : place === 2 ? 'finalista' : place <= 4 ? 'semifinales' : place <= 8 ? 'cuartos' : 'fase de grupos'}.` });
+    else {
+      const prize = Math.round((id === 'worlds' ? 60000 : id === 'msi' ? 25000 : 3000) / place);
+      pl.money += prize;
+      pl.earned += prize;
+      news(S, `${name}: ${txt}. +${U.money(prize)} en premios.`, place <= 2 ? 'good' : '');
+    }
+    pl.history.push({ year: S.year, text: `${nm}: ${txt}.` });
     if (id === 'worlds' && place === 1) {
       const st = pl.stats.seasons[`${S.year} Worlds`];
       if (st && st.g && st.r / st.g >= 7.4 && U.chance(0.5)) {
@@ -587,7 +607,7 @@
   // Coste por turno (semana; en la etapa amateur, mes) de un miembro del staff en un nivel
   P.staffCost = function (S, id, tier = P.staffTier(S, id) || 1) {
     const s = C.STAFF.find((x) => x.id === id);
-    if (s.pct) return Math.max(100, Math.round(((S.pl.contract ? S.pl.contract.salary : 0) / TURNS_PRO) * s.pct[tier - 1]));
+    if (s.pct) return Math.max(100, Math.round(((S.pl.contract ? S.pl.contract.salary : 0) / WEEKS) * s.pct[tier - 1]));
     return Math.round(s.cost * C.STAFF_TIER_COST[tier - 1]) * (S.amateur ? 4 : 1);
   };
 
@@ -630,7 +650,7 @@
       const ids = k === 'all' ? C.ATTRS.map((a) => a.id) : [k];
       let tot = 0;
       for (const a of ids) {
-        const g = v * Math.max(0.25, (100 - pl.attrs[a]) / 25);
+        const g = v * Math.max(0.1, (100 - pl.attrs[a]) / 30);
         pl.attrs[a] = U.round1(Math.min(99, pl.attrs[a] + g));
         tot += g;
       }
@@ -646,10 +666,10 @@
   P.budget = function (S) {
     const pl = S.pl;
     const items = [];
-    if (pl.contract) items.push({ label: 'Sueldo', amount: pl.contract.salary / TURNS_PRO });
+    if (pl.contract) items.push({ label: 'Sueldo del equipo', amount: pl.contract.salary / WEEKS });
     if (S.amateur) items.push({ label: 'Paga de tus padres', amount: 60 });
     const weeks = S.amateur ? 4 : 1;
-    for (const sp of pl.sponsors) items.push({ label: sp.name, amount: sp.pay * weeks * (pl.streams >= 3 ? 1.1 : 1) });
+    for (const sp of pl.sponsors) items.push({ label: 'Patrocinio · ' + sp.name, amount: sp.pay * weeks * (pl.streams >= 3 ? 1.1 : 1) });
     for (const id of Object.keys(pl.staff)) {
       const st = C.STAFF.find((x) => x.id === id);
       items.push({ label: `${st.name} (${C.STAFF_TIERS[P.staffTier(S, id) - 1]})`, amount: -P.staffCost(S, id) });
@@ -661,24 +681,40 @@
 
   // ---------- Patrocinadores ----------
   P.maxSponsors = (S) => 3 + P.staffTier(S, 'cm');
+  // Valor semanal que una marca pagaría por ti: liga, nivel, fama y títulos
+  P.sponsorValue = function (S) {
+    const pl = S.pl;
+    const team = P.team(S);
+    const tier = team ? C.LEAGUES[team.league].tier : 6;
+    const base = { 1: 2500, 2: 1500, 3: 700, 4: 350, 5: 150, 6: 40 }[tier];
+    let v = base + pl.fans * 0.003 + Math.max(0, P.ovr(S) - 70) * 35;
+    const worlds = pl.titles.filter((t) => t.name.startsWith('Worlds')).length;
+    v *= 1 + Math.min(0.5, pl.titles.length * 0.04) + worlds * 0.1;
+    if (S.amateur) v *= 0.3;
+    return Math.min(25000, v);
+  };
+  P.sponsorLevel = (v) => (v < 300 ? 1 : v < 1500 ? 2 : v < 5000 ? 3 : 4);
+
   P.genSponsorOffers = function (S) {
     const pl = S.pl;
     if (pl.fans < 3000 || pl.sponsors.length >= P.maxSponsors(S)) return;
+    const value = P.sponsorValue(S);
+    const lvl = P.sponsorLevel(value);
     const have = new Set(pl.sponsors.map((s) => s.name).concat(S.sponsorOffers.map((s) => s.name)));
-    const free = C.SPONSOR_BRANDS.filter((b) => !have.has(b.name));
-    const chance = 0.35 + (P.hasStaff(S, 'cm') ? 0.15 : 0) + (P.hasStaff(S, 'agente') ? 0.1 : 0);
+    let free = C.SPONSOR_BRANDS.filter((b) => !have.has(b.name) && b.level === lvl);
+    if (!free.length) free = C.SPONSOR_BRANDS.filter((b) => !have.has(b.name) && b.level <= lvl);
+    const chance = 0.35 + P.staffTier(S, 'cm') * 0.07 + P.staffTier(S, 'agente') * 0.05;
     if (!free.length || !U.chance(chance)) return;
     const b = U.pick(free);
-    const mult = 1 + P.staffEff(S, 'agente');
-    const pay = Math.round(Math.min(3000, 40 + pl.fans * 0.002) * U.rand(0.8, 1.2) * mult / 10) * 10;
-    S.sponsorOffers.push({ id: U.uid(), name: b.name, kind: b.kind, pay, promos: pay > 800 ? 2 : 1, splits: U.randInt(2, 3), expires: S.turn + 4 });
-    news(S, `${b.name} quiere patrocinarte.`, 'good');
+    const pay = Math.round((value * U.rand(0.8, 1.1) * (1 + P.staffEff(S, 'agente'))) / 10) * 10;
+    S.sponsorOffers.push({ id: U.uid(), name: b.name, kind: b.kind, level: b.level, pay, promos: b.level >= 3 ? 2 : 1, splits: U.randInt(2, 3), expires: S.turn + 4 });
+    news(S, `${b.name} (${C.SPONSOR_LEVELS[b.level].toLowerCase()}) quiere patrocinarte por ${U.money(pay)} a la semana.`, 'good');
   };
   P.acceptSponsor = function (S, id) {
     const o = S.sponsorOffers.find((x) => x.id === id);
     if (!o) return;
     if (S.pl.sponsors.length >= P.maxSponsors(S)) return { ok: false, msg: 'Ya tienes el máximo de patrocinadores.' };
-    S.pl.sponsors.push({ name: o.name, kind: o.kind, pay: o.pay, promos: o.promos, done: 0, splits: o.splits });
+    S.pl.sponsors.push({ name: o.name, kind: o.kind, level: o.level || 2, pay: o.pay, promos: o.promos, done: 0, splits: o.splits });
     S.sponsorOffers = S.sponsorOffers.filter((x) => x !== o);
     return { ok: true, msg: `Firmas con ${o.name}.` };
   };
@@ -746,7 +782,8 @@
     } else if (S.turn % 4 === 3) P.checkSponsors(S);
     // Economía
     const bud = P.budget(S);
-    const income = bud.income, costs = bud.costs;
+    const f = S.amateur ? 1 : RC.Season.turnDays(S) / 7;
+    const income = bud.income * f, costs = bud.costs * f;
     pl.money += income - costs;
     pl.earned += income;
     report.income = income; report.costs = costs;
@@ -791,6 +828,7 @@
       if (!S.over) report.events.push(...RC.Season.prepareTurn(S));
     }
     pl.peakOvr = Math.max(pl.peakOvr, P.ovr(S));
+    report.events.push(...P.checkAchievements(S));
     S.lastReport = report;
     return report;
   };
@@ -803,7 +841,7 @@
     if (!pl.teamId) {
       pl.freeTurns++;
       if (pl.freeTurns % 3 === 1) P.genOffers(S, 1 + (P.hasStaff(S, 'agente') ? 1 : 0));
-      if (pl.freeTurns >= TURNS_PRO) return endCareer(S, 'Llevas un año entero sin equipo. Ningún club apuesta por ti y te retiras.');
+      if (pl.freeTurns >= S.cal.length) return endCareer(S, 'Llevas un año entero sin equipo. Ningún club apuesta por ti y te retiras.');
     }
     // Ventanas de mercado
     if (t.phase === 'off' || (t.phase === 'pre' && t.round === 0) || (t.phase === 'msi' && t.round === 0)) {
@@ -850,8 +888,8 @@
     RC.Season.newComp(S);
     // Las ofertas viejas caducan con el cambio de año
     S.offers = S.offers.filter((o) => !o.renewal);
-    S.offers.forEach((o) => (o.expires -= TURNS_PRO));
-    S.sponsorOffers.forEach((o) => (o.expires -= TURNS_PRO));
+    S.offers.forEach((o) => (o.expires -= S.cal.length));
+    S.sponsorOffers.forEach((o) => (o.expires -= S.cal.length));
     news(S, `Empieza ${S.year}. Tienes ${pl.age} años.`);
     if (pl.age >= 36) endCareer(S, 'Con 36 años decides colgar el ratón.');
   }
@@ -862,6 +900,51 @@
     news(S, why, 'bad');
     P.saveHallOfFame(S);
   }
+
+  // ---------- Logros ----------
+  const ACH_TEST = {
+    pro: (S) => !S.amateur && !!S.pl.teamId,
+    prodigy: (S) => !S.amateur && !!S.pl.teamId && S.pl.age <= 15,
+    win1: (S) => S.pl.stats.career.w > 0,
+    g100: (S) => S.pl.stats.career.g >= 100,
+    g500: (S) => S.pl.stats.career.g >= 500,
+    penta: (S) => (S.pl.stats.career.penta || 0) > 0,
+    mvp10: (S) => S.pl.stats.career.mvp >= 10,
+    title: (S) => S.pl.titles.length > 0,
+    titles10: (S) => S.pl.titles.length >= 10,
+    splitmvp: (S) => S.pl.awards.some((a) => a.name.startsWith('MVP de la')),
+    intl: (S) => Object.keys(S.pl.stats.seasons).some((k) => /MSI|Worlds/.test(k)),
+    msi: (S) => S.pl.titles.some((t) => t.name.startsWith('MSI')),
+    worlds: (S) => S.pl.titles.some((t) => t.name.startsWith('Worlds')),
+    worlds3: (S) => S.pl.titles.filter((t) => t.name.startsWith('Worlds')).length >= 3,
+    major: (S) => { const t = P.team(S); return !!t && ['LCK', 'LPL', 'LEC', 'LCS'].includes(t.league); },
+    korea: (S) => { const t = P.team(S); return !!t && t.league === 'LCK'; },
+    chall: (S) => S.pl.lp >= 3600,
+    ovr80: (S) => P.ovr(S) >= 80,
+    ovr90: (S) => P.ovr(S) >= 90,
+    ovr95: (S) => P.ovr(S) >= 95,
+    fans100k: (S) => S.pl.fans >= 100000,
+    fans1m: (S) => S.pl.fans >= 1000000,
+    rich: (S) => S.pl.money >= 1000000,
+    setup: (S) => C.GEAR.every((g) => P.gearLevel(S, g.id) >= 5),
+    elite: (S) => Object.keys(S.pl.staff).filter((id) => P.staffTier(S, id) === 3).length >= 3,
+  };
+  P.checkAchievements = function (S) {
+    const pl = S.pl;
+    pl.ach = pl.ach || {};
+    const got = [];
+    for (const a of C.ACHIEVEMENTS) {
+      if (pl.ach[a.id] || !ACH_TEST[a.id] || !ACH_TEST[a.id](S)) continue;
+      pl.ach[a.id] = S.year;
+      pl.money += a.money;
+      pl.fans += a.fans;
+      const rw = [a.money ? U.money(a.money) : '', a.fans ? '+' + U.num(a.fans) + ' seguidores' : ''].filter(Boolean).join(' y ');
+      const txt = `Logro desbloqueado: ${a.name}${rw ? ` (${rw})` : ''}.`;
+      news(S, txt, 'good');
+      got.push(txt);
+    }
+    return got;
+  };
 
   P.canRetire = (S) => !S.amateur && S.pl.age >= 27 && !S.over;
   P.retire = function (S) {

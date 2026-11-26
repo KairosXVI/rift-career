@@ -45,9 +45,57 @@
     if (userIn) {
       const win = (userIn === 'A') === aWins;
       line = Sim.userLine(S, perf, win, champ, oppP);
+      line.board = Sim.board(S, A, B, aWins, champ, line);
+      const oppLine = line.board[userIn === 'A' ? 'B' : 'A'].find((x) => x.role === S.pl.role);
+      if (oppLine) line.oppChamp = oppLine.champ;
     }
     return { aWins, line };
   };
+
+  // Marcador completo de los 10 jugadores (solo para las partidas del usuario)
+  Sim.board = function (S, A, B, aWins, userChamp, userLine) {
+    const used = new Set([userChamp]);
+    const side = (T, win) => C.ROLES.map((r) => {
+      const pid = T.roster[r];
+      if (pid === 'USER') return { role: r, name: S.pl.name, champ: userChamp, k: userLine.k, d: userLine.d, a: userLine.a, cs: userLine.cs, rating: userLine.rating, user: true };
+      const p = S.world.players[pid];
+      const pool = (p ? p.pool : []).filter((c) => !used.has(c));
+      const opts = pool.length ? pool : RC.D.champsForRole(r).filter((c) => !used.has(c));
+      const champ = opts.slice().sort((x, y) => (S.patch.meta[y] || 0) - (S.patch.meta[x] || 0) + U.gauss() * 0.8)[0];
+      used.add(champ);
+      const st = statLine(r, U.gauss() * 0.9, win, null);
+      return Object.assign({ role: r, name: p ? p.name : '?', champ }, st);
+    });
+    const board = { A: side(A, aWins), B: side(B, !aWins) };
+    // Que cuadren: las muertes de un equipo suman los asesinatos del rival y nadie asiste más de lo que mata su equipo
+    const fix = (mine, enemy) => {
+      const ek = U.sum(enemy.map((r) => r.k));
+      const sd = U.sum(mine.map((r) => r.d)) || 1;
+      mine.forEach((r) => (r.d = Math.round((r.d * ek) / sd)));
+      const diff = ek - U.sum(mine.map((r) => r.d));
+      const top = mine.slice().sort((x, y) => y.d - x.d)[0];
+      top.d = Math.max(0, top.d + diff);
+      const tk = U.sum(mine.map((r) => r.k));
+      mine.forEach((r) => (r.a = Math.min(r.a, Math.max(0, tk - r.k))));
+    };
+    fix(board.A, board.B);
+    fix(board.B, board.A);
+    const me = board.A.concat(board.B).find((r) => r.user);
+    if (me) { userLine.d = me.d; userLine.a = me.a; }
+    return board;
+  };
+
+  function statLine(role, perf, win, style) {
+    const b = BASE[role];
+    const wk = win ? 1.35 : 0.65, wd = win ? 0.7 : 1.3;
+    let km = b.k * wk * (1 + 0.25 * perf), dm = b.d * wd * Math.max(0.3, 1 - 0.2 * perf), am = b.a * wk * (1 + 0.12 * perf);
+    if (style === 'agresivo') { km *= 1.15; dm *= 1.15; }
+    const k = around(km), d = around(dm), a = around(am);
+    const cs = U.round1(Math.max(role === 'Support' ? 0.6 : 3.5, b.cs + perf * 0.4 + U.gauss() * 0.35 + (win ? 0.3 : -0.3)));
+    const kda = (k + a) / Math.max(1, d);
+    const rating = U.clamp(U.round1(6.4 + perf * 0.85 + (win ? 0.5 : -0.5) + U.clamp((kda - 3) * 0.15, -0.6, 0.8)), 2.5, 10);
+    return { k, d, a, cs, rating };
+  }
 
   function around(mean) {
     return Math.max(0, Math.round(mean + U.gauss() * Math.sqrt(Math.max(0.3, mean)) * 0.8));
@@ -65,7 +113,9 @@
     const kda = (k + a) / Math.max(1, d);
     let rating = 6.4 + perf * 0.85 + (win ? 0.5 : -0.5) + U.clamp((kda - 3) * 0.15, -0.6, 0.8);
     rating = U.clamp(U.round1(rating), 2.5, 10);
-    return { win, k, d, a, cs: U.round1(cs), rating, champ, opp: oppP ? oppP.name : '?', oppChamp: oppP ? U.pick(oppP.pool) : null };
+    const penta = k >= 6 && U.chance(0.008 + (k - 6) * 0.012 + Math.max(0, perf) * 0.005);
+    if (penta) rating = Math.min(10, U.round1(rating + 0.5));
+    return { win, k, d, a, cs: U.round1(cs), rating, champ, penta, opp: oppP ? oppP.name : '?', oppChamp: null };
   };
 
   // Serie al mejor de bo. Devuelve el resultado completo.

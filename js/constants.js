@@ -158,17 +158,53 @@
     { id: 'chall', name: 'Challenger', from: 800, exp: 84 },
   ];
 
+  // Marcas por nivel: 1 local, 2 nacional, 3 internacional, 4 global
+  C.SPONSOR_LEVELS = ['', 'Local', 'Nacional', 'Internacional', 'Global'];
   C.SPONSOR_BRANDS = [
-    { name: 'Nexwave Periféricos', kind: 'Periféricos' }, { name: 'VoltRush', kind: 'Bebida energética' },
-    { name: 'Kairo Sillas', kind: 'Sillas gaming' }, { name: 'Pulse Mobile', kind: 'Telefonía' },
-    { name: 'Orbis PC', kind: 'Ordenadores' }, { name: 'Lumen Wear', kind: 'Ropa' },
-    { name: 'NovaBank', kind: 'Banco' }, { name: 'Fizzy Cola', kind: 'Refrescos' },
-    { name: 'TurboFood', kind: 'Comida a domicilio' }, { name: 'Astra Motors', kind: 'Coches' },
+    { name: 'Cafetería Nexo', kind: 'Hostelería', level: 1 }, { name: 'PixelBox Informática', kind: 'Tienda de PC', level: 1 },
+    { name: 'Gimnasio Ironcore', kind: 'Deporte', level: 1 }, { name: 'Pizzería Bianca', kind: 'Comida', level: 1 },
+    { name: 'Nexwave Periféricos', kind: 'Periféricos', level: 2 }, { name: 'VoltRush', kind: 'Bebida energética', level: 2 },
+    { name: 'Kairo Sillas', kind: 'Sillas gaming', level: 2 }, { name: 'Pulse Mobile', kind: 'Telefonía', level: 2 },
+    { name: 'Fizzy Cola', kind: 'Refrescos', level: 2 },
+    { name: 'Orbis PC', kind: 'Ordenadores', level: 3 }, { name: 'Lumen Wear', kind: 'Ropa', level: 3 },
+    { name: 'TurboFood', kind: 'Comida a domicilio', level: 3 }, { name: 'NovaBank', kind: 'Banca', level: 3 },
+    { name: 'Astra Motors', kind: 'Coches', level: 4 }, { name: 'Helix Energy', kind: 'Bebida energética', level: 4 },
+    { name: 'Zenith Electronics', kind: 'Electrónica', level: 4 }, { name: 'Aurora Airlines', kind: 'Aerolínea', level: 4 },
+    { name: 'Titan Watches', kind: 'Relojes de lujo', level: 4 },
   ];
 
   C.FAME = [
     { min: 0, name: 'Desconocido' }, { min: 2000, name: 'Promesa' }, { min: 15000, name: 'Conocido' },
     { min: 80000, name: 'Popular' }, { min: 300000, name: 'Estrella' }, { min: 1000000, name: 'Leyenda' },
+  ];
+
+  // Logros: cond recibe el estado; reward en dinero y seguidores
+  C.ACHIEVEMENTS = [
+    { id: 'pro', name: 'Profesional', desc: 'Firma tu primer contrato profesional.', money: 500, fans: 500 },
+    { id: 'prodigy', name: 'Niño prodigio', desc: 'Debuta como profesional con 15 años o menos.', money: 2000, fans: 5000 },
+    { id: 'win1', name: 'Primera victoria', desc: 'Gana tu primera serie oficial.', money: 300, fans: 300 },
+    { id: 'g100', name: 'Centenario', desc: 'Juega 100 partidas oficiales.', money: 5000, fans: 5000 },
+    { id: 'g500', name: 'Veterano', desc: 'Juega 500 partidas oficiales.', money: 25000, fans: 30000 },
+    { id: 'penta', name: 'Pentakill', desc: 'Consigue un pentakill en un partido oficial.', money: 3000, fans: 20000 },
+    { id: 'mvp10', name: 'Hombre partido', desc: 'Consigue 10 MVP de serie.', money: 5000, fans: 10000 },
+    { id: 'title', name: 'Campeón', desc: 'Gana tu primer título.', money: 5000, fans: 10000 },
+    { id: 'titles10', name: 'Coleccionista', desc: 'Gana 10 títulos.', money: 50000, fans: 100000 },
+    { id: 'splitmvp', name: 'MVP de liga', desc: 'Gana un premio MVP de split.', money: 10000, fans: 20000 },
+    { id: 'intl', name: 'Internacional', desc: 'Juega el MSI o los Worlds.', money: 5000, fans: 20000 },
+    { id: 'msi', name: 'Rey del MSI', desc: 'Gana el MSI.', money: 20000, fans: 80000 },
+    { id: 'worlds', name: 'Campeón del mundo', desc: 'Gana los Worlds.', money: 50000, fans: 200000 },
+    { id: 'worlds3', name: 'Dinastía', desc: 'Gana 3 Worlds.', money: 200000, fans: 500000 },
+    { id: 'major', name: 'Gran escenario', desc: 'Juega en la LCK, LPL, LEC o LCS.', money: 5000, fans: 15000 },
+    { id: 'korea', name: 'Rumbo a Seúl', desc: 'Ficha por un equipo de la LCK.', money: 10000, fans: 30000 },
+    { id: 'chall', name: 'Challenger', desc: 'Llega a Challenger en SoloQ.', money: 2000, fans: 10000 },
+    { id: 'ovr80', name: 'Nivel profesional', desc: 'Alcanza 80 de media.', money: 2000, fans: 3000 },
+    { id: 'ovr90', name: 'Clase mundial', desc: 'Alcanza 90 de media.', money: 10000, fans: 30000 },
+    { id: 'ovr95', name: 'Leyenda viva', desc: 'Alcanza 95 de media.', money: 50000, fans: 100000 },
+    { id: 'fans100k', name: 'Influencer', desc: 'Llega a 100.000 seguidores.', money: 5000, fans: 0 },
+    { id: 'fans1m', name: 'Icono', desc: 'Llega a 1 millón de seguidores.', money: 50000, fans: 0 },
+    { id: 'rich', name: 'Millonario', desc: 'Ten 1.000.000 € en la cuenta.', money: 0, fans: 50000 },
+    { id: 'setup', name: 'Setup definitivo', desc: 'Todo el equipamiento al nivel máximo.', money: 0, fans: 20000 },
+    { id: 'elite', name: 'Staff de élite', desc: 'Ten 3 miembros del staff en nivel Élite.', money: 0, fans: 20000 },
   ];
 
   C.MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];

@@ -19,6 +19,12 @@ Abre `index.html` desde un servidor web (GitHub Pages o, en local, `python3 -m h
 ### Temporada
 Pretemporada → Winter Split → Spring Split → MSI (y EMEA Masters para las ERL) → Summer Split → Worlds → mercado de fichajes. Cada split tiene 9 jornadas y playoffs a mejor de 5 con los 6 primeros. Al inicio de cada split sale un parche que cambia el meta.
 
+- **MSI:** Play-In con dos grupos de doble eliminación (Bo3) y Bracket Stage de 8 equipos a doble eliminación (Bo5).
+- **Worlds:** Play-In (4º de LCK contra 4º de LPL), fase suiza de 16 equipos y eliminatorias a Bo5.
+
+### Extras
+Marcador completo de los 10 jugadores en cada partida, ranking mundial de jugadores y equipos, logros, patrocinadores por niveles (local, nacional, internacional y global), staff con tres niveles y experiencias de pago como bootcamps.
+
 ### Mercado
 Las ofertas llegan en pretemporada, durante el MSI y después de los Worlds. Puedes negociar el sueldo con 3 intentos dentro de un rango, o ofrecerte tú a cualquier equipo de las 17 ligas si cumples su nivel mínimo. Los extranjeros necesitan más nivel en Corea y China.
 

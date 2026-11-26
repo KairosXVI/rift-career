@@ -9,6 +9,7 @@ for (const f of ['util', 'constants', 'data', 'world', 'sim', 'season', 'career'
 const RC = ctx.RC;
 (async () => {
   await RC.D.load();
+  if (process.env.NOBOOST) RC.P.boostAll = () => 0;
   const mode = process.argv[2] || 'pro', years = +(process.argv[3] || 6), strat = process.argv[4] || 'good';
   const S = RC.P.newGame({ mode, name: 'Test', nation: 'ES', role: 'Mid', style: 'estratega', champs: RC.D.champsForRole('Mid').slice(0, 3) });
   if (S.startOffers) RC.P.startPro(S, S.startOffers[0]);
