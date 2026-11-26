@@ -1,18 +1,21 @@
 /* Carga de datos estáticos (jugadores reales 2026, campeones y equipos). */
 (function (RC) {
-  const D = { players: [], champions: {}, teams: {}, champVersion: '', champRoles: {}, roleChamps: {} };
+  const D = { players: [], champions: {}, teams: {}, champVersion: '', champRoles: {}, roleChamps: {}, icons: {}, logos: {} };
   const FIX = { LeBlanc: 'Leblanc', MFortune: 'MissFortune', Wukong: 'MonkeyKing', Nunu: 'Nunu', RenataGlasc: 'Renata', KhaZix: 'Khazix', ChoGath: 'Chogath', VelKoz: 'Velkoz', KaiSa: 'Kaisa', BelVeth: 'Belveth', KogMaw: 'KogMaw', RekSai: 'RekSai' };
 
   D.fixChamp = (id) => FIX[id] || id;
   D.champName = (id) => (D.champions[id] ? D.champions[id].name : id);
-  D.champImg = (id) => 'assets/champions/' + id + '.png';
+  D.champImg = (id) => D.icons[id] || '';
+  D.logo = (path) => D.logos[path] || '';
 
   D.load = async function () {
-    const [pl, ch, tm] = await Promise.all([
-      fetch('data/players.json').then((r) => r.json()),
-      fetch('data/champions.json').then((r) => r.json()),
-      fetch('data/teams.json').then((r) => r.json()),
+    const get = (u) => fetch(u).then((r) => r.json());
+    const [pl, ch, tm, icons, logos] = await Promise.all([
+      get('data/players.json'), get('data/champions.json'), get('data/teams.json'),
+      get('data/champ_icons.json'), get('data/team_logos.json'),
     ]);
+    D.icons = icons;
+    D.logos = logos;
     D.champions = ch.champions;
     D.champVersion = ch.version;
     D.teams = tm;

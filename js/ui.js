@@ -28,10 +28,11 @@
   // ---------- Piezas ----------
   const teamLogo = (team, s = 36) => {
     if (!team) return `<div class="logo-txt" style="--s:${s}px;background:#223">?</div>`;
-    if (team.logo) return `<img class="logo" style="--s:${s}px" src="${esc(team.logo)}" alt="${esc(team.short)}" loading="lazy">`;
+    const src = team.logo && D.logo(team.logo);
+    if (src) return `<img class="logo" style="--s:${s}px" src="${src}" alt="${esc(team.short)}">`;
     return `<div class="logo-txt" style="--s:${s}px;background:${team.color}">${esc(team.short.slice(0, 4))}</div>`;
   };
-  const champImg = (id, s = 40) => `<img class="champ" style="--s:${s}px" src="${D.champImg(id)}" alt="${esc(D.champName(id))}" title="${esc(D.champName(id))}" loading="lazy">`;
+  const champImg = (id, s = 40) => `<img class="champ" style="--s:${s}px" src="${D.champImg(id)}" alt="${esc(D.champName(id))}" title="${esc(D.champName(id))}">`;
   const bar = (v, max = 100, cls = '') => `<div class="bar ${cls}"><i style="width:${U.clamp((v / max) * 100, 0, 100)}%"></i></div>`;
   const tierBadge = (champ) => { const t = P.tierOf(P.meta(G.S, champ)); return `<span class="tier tier-${t}" title="Tier ${t} en el parche">${t}</span>`; };
   const leagueName = (lg) => (C.LEAGUES[lg] ? C.LEAGUES[lg].name : lg);
