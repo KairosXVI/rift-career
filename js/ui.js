@@ -222,10 +222,20 @@
           <div class="attr"><span>Rango</span><span class="small">${esc(P.rankInfo(pl.lp).name)}</span><span class="v small">${P.rankInfo(pl.lp).lp} LP</span></div>
           <div class="attr"><span>Fama</span><span class="small">${esc(P.fame(S).name)}</span><span class="v small">${U.num(pl.fans)}</span></div>
         </div>
+        ${budgetPanel(S)}
         <div class="panel"><div class="panel-h"><h2>Noticias</h2></div>
           <div class="feed">${S.news.slice(0, 14).map((n) => `<div class="${n.kind}"><small>${esc(n.when)}</small>${esc(n.text)}</div>`).join('') || '<div class="muted">Sin noticias todavía.</div>'}</div></div>
       </div>
     </div>`;
+  }
+
+  function budgetPanel(S) {
+    const b = P.budget(S);
+    const row = (i) => `<div class="row between small" style="padding:4px 0;border-bottom:1px solid var(--line2)"><span>${esc(i.label)}</span><span class="num ${i.amount >= 0 ? 'good' : 'bad'}">${i.amount >= 0 ? '+' : '−'}${U.money(Math.abs(i.amount))}</span></div>`;
+    return `<div class="panel"><div class="panel-h"><h2>Economía</h2><span class="small muted">por ${b.unit}</span></div>
+      ${b.items.length ? b.items.map(row).join('') : '<p class="small muted">Sin ingresos ni gastos fijos.</p>'}
+      <div class="row between" style="padding-top:8px"><b style="color:var(--bright)">Balance</b><b class="num ${b.net >= 0 ? 'good' : 'bad'}">${b.net >= 0 ? '+' : '−'}${U.money(Math.abs(b.net))}</b></div>
+      ${b.net < 0 ? `<p class="small bad" style="margin:6px 0 0">Pierdes dinero cada ${b.unit}. Con tu saldo actual aguantas ${Math.max(0, Math.floor(S.pl.money / -b.net))} ${b.unit === 'mes' ? 'meses' : 'semanas'}.</p>` : ''}</div>`;
   }
 
   function scoutHint(S) {
@@ -358,7 +368,16 @@
           <div class="small muted" style="margin:6px 0 10px">Por nivel: ${eff.join(' · ')}</div>
           ${next != null ? `<button class="btn ${S.pl.money >= next ? 'primary' : ''} block" data-act="buy" data-v="${g.id}" ${S.pl.money < next ? 'disabled' : ''}>${esc(g.levels[l])} · ${U.money(next)}</button>` : '<span class="badge gold">Nivel máximo</span>'}
         </div>`;
-      }).join('')}</div></div>`;
+      }).join('')}</div>
+      <div class="panel"><div class="panel-h"><h2>Experiencias</h2><span class="small muted">Cada una se puede hacer una vez por split</span></div>
+        <div class="grid g3">${C.EXPERIENCES.map((e) => {
+          const av = P.expAvailable(S, e.id);
+          const gains = Object.entries(e.gains || {}).map(([k, v]) => `${k === 'all' ? 'Todo' : C.ATTR_NAME[k]} +${v}`).concat(e.mastery ? [`Maestría del pool +${e.mastery}`] : [], e.morale ? [`Moral +${e.morale}`] : []);
+          return `<div class="panel" style="background:var(--panel2)"><h3>${e.name}</h3><p class="small muted" style="margin:6px 0">${e.desc}</p>
+            ${gains.length ? `<div class="row" style="margin-bottom:10px">${gains.map((g) => `<span class="badge gold">${g}</span>`).join('')}</div>` : ''}
+            <button class="btn block ${av && S.pl.money >= e.price ? 'primary' : ''}" data-act="exp" data-v="${e.id}" ${!av || S.pl.money < e.price ? 'disabled' : ''}>${!av ? (e.once ? 'Ya la tienes' : 'Hecha este split') : U.money(e.price)}</button></div>`;
+        }).join('')}</div>
+        <p class="small muted" style="margin:10px 0 0">Las mejoras rinden menos cuanto más alto tienes el atributo.</p></div></div>`;
   }
 
   // ----- Staff -----
@@ -367,13 +386,14 @@
     const unit = S.amateur ? 'mes' : 'semana';
     const total = U.sum(Object.keys(S.pl.staff).map((id) => P.staffCost(S, id)));
     return `<div class="stack"><div class="panel"><div class="panel-h"><h2>Staff personal</h2><span class="small">Gasto: <b class="num gold">${U.money(total)}</b> / ${unit}</span></div>
-      <p class="small muted" style="margin:0">Se paga cada ${unit}. Si te quedas sin dinero, el staff se marcha.${S.pl.contract ? ` Tu sueldo: ${U.money(S.pl.contract.salary / 51)} / semana.` : ''}</p></div>
+      <p class="small muted" style="margin:0">Cada miembro tiene tres niveles: Básico, Profesional y Élite. Se paga cada ${unit}. Si te quedas sin dinero, el staff se marcha.${S.pl.contract ? ` Tu sueldo: ${U.money(S.pl.contract.salary / 51)} / semana.` : ''}</p></div>
       <div class="grid g3">${C.STAFF.map((s) => {
-        const on = P.hasStaff(S, s.id);
-        return `<div class="panel" ${on ? 'style="border-color:var(--gold-d)"' : ''}><div class="panel-h"><h3>${s.name}</h3>${on ? '<span class="badge win">Contratado</span>' : ''}</div>
-          <p class="small" style="margin:0 0 10px">${s.desc}</p>
-          <div class="row between"><span class="num gold">${U.money(P.staffCost(S, s.id))} / ${unit}</span>
-          <button class="btn sm ${on ? 'danger' : 'blue'}" data-act="staff" data-v="${s.id}">${on ? 'Despedir' : 'Contratar'}</button></div></div>`;
+        const tier = P.staffTier(S, s.id);
+        const shown = tier || 1;
+        return `<div class="panel" ${tier ? 'style="border-color:var(--gold-d)"' : ''}><div class="panel-h"><h3>${s.name}</h3>${tier ? `<span class="badge win">${C.STAFF_TIERS[tier - 1]}</span>` : ''}</div>
+          <p class="small" style="margin:0 0 10px">${s.desc(s.eff[shown - 1], shown - 1)}</p>
+          <div class="stack" style="gap:6px">${[1, 2, 3].map((t) => `<button class="btn sm ${tier === t ? 'primary' : ''}" data-act="staffSet" data-v="${s.id}" data-t="${t}" ${tier === t ? 'disabled' : ''} style="justify-content:space-between"><span>${C.STAFF_TIERS[t - 1]}</span><span class="num">${s.pct ? Math.round(s.pct[t - 1] * 100) + ' % · ' : ''}${U.money(P.staffCost(S, s.id, t))} / ${unit}</span></button>`).join('')}
+          ${tier ? `<button class="btn sm danger" data-act="staffSet" data-v="${s.id}" data-t="0">Despedir</button>` : ''}</div></div>`;
       }).join('')}</div></div>`;
   }
 
@@ -636,7 +656,8 @@
     champAdd: (d) => { const r = P.addChamp(G.S, d.v); if (G.S.pl.pool.includes(d.v) && !r) { after({ ok: true, msg: 'Ya está en tu pool.' }); return; } after(r || { ok: true, msg: `${D.champName(d.v)} añadido a tu pool.` }); },
     champRemove: (d) => { P.removeChamp(G.S, d.v); after(); },
     buy: (d) => after(P.buyGear(G.S, d.v)),
-    staff: (d) => after(P.toggleStaff(G.S, d.v)),
+    staffSet: (d) => after(P.setStaff(G.S, d.v, +d.t)),
+    exp: (d) => after(P.buyExperience(G.S, d.v)),
     advance: () => {
       const wasAmateur = G.S.amateur;
       const rep = P.advance(G.S);
@@ -710,7 +731,10 @@
     }
   }
 
-  RC.migrate = (S) => S;
+  RC.migrate = (S) => {
+    if (S && !S.amateur && S.world && S.cal) Season.prepareTurn(S);
+    return S;
+  };
 
   RC.bindEvents = function () {
     document.addEventListener('click', (ev) => {

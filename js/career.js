@@ -17,6 +17,8 @@
   P.gearLevel = (S, id) => S.pl.gear[id] || 0;
   P.luck = (S) => U.sum(C.GEAR.map((g) => (g.luck || 0) * P.gearLevel(S, g.id))) + (S.pl.luckBonus || 0);
   P.hasStaff = (S, id) => !!S.pl.staff[id];
+  P.staffTier = (S, id) => (S.pl.staff[id] === true ? 1 : S.pl.staff[id] || 0);
+  P.staffEff = (S, id) => { const t = P.staffTier(S, id); return t ? C.STAFF.find((x) => x.id === id).eff[t - 1] : 0; };
   P.actionsPerTurn = (S) => 4 + (P.hasStaff(S, 'coach') ? 1 : 0);
   P.actionsLeft = (S) => P.actionsPerTurn(S) - S.pl.actionsUsed;
   P.nation = (S) => C.NATIONS.find((n) => n.id === S.pl.nation) || C.NATIONS[0];
@@ -173,11 +175,11 @@
     S.pl.teamId = null;
     for (let i = 0; i < target; i++) {
       const t = S.cal[S.turn];
-      if (t.kind === 'reg' && t.round === 0) P.newPatch(S);
       RC.Season.playTurn(S);
       S.turn++;
     }
     S.pl.teamId = saved;
+    RC.Season.prepareTurn(S);
     const t = S.cal[S.turn];
     const endYear = S.year + offer.years - (t.phase === 'off' ? 0 : 1);
     P.joinTeam(S, offer.teamId, { salary: offer.salary, endYear });
@@ -219,9 +221,9 @@
     let gear = 1 + 0.03 * P.gearLevel(S, 'pc');
     for (const it of C.GEAR) if (it.boost[attr]) gear += it.boost[attr] * P.gearLevel(S, it.id);
     g *= gear;
-    if (P.hasStaff(S, 'coach')) g *= 1.1;
-    if (attr === 'mentalidad' && P.hasStaff(S, 'psico')) g *= 1.25;
-    if ((attr === 'macro' || attr === 'vision') && P.hasStaff(S, 'analista')) g *= 1.25;
+    g *= 1 + P.staffEff(S, 'coach') + (S.pl.sede ? 0.1 : 0);
+    if (attr === 'mentalidad') g *= 1 + P.staffEff(S, 'psico');
+    if (attr === 'macro' || attr === 'vision') g *= 1 + P.staffEff(S, 'analista');
     const em = pl.energy >= 40 ? 1 : 0.5 + pl.energy / 80;
     g *= em * Math.max(0.03, Math.pow(Math.max(0, 100 - v) / 35, 1.3)) * U.rand(0.75, 1.25) * mult;
     pl.attrs[attr] = U.round1(Math.min(99, v + g));
@@ -248,13 +250,13 @@
       const champ = arg && pl.pool.includes(arg) ? arg : pl.pool[0];
       if (!champ) return { ok: false, msg: 'Añade campeones a tu pool primero.' };
       const m = P.mastery(S, champ);
-      let g = Math.max(0.6, 9 * (100 - m) / 60) * (P.hasStaff(S, 'champcoach') ? 1.4 : 1) * U.rand(0.8, 1.2) * (pl.energy >= 40 ? 1 : 0.6);
+      let g = Math.max(0.6, 9 * (100 - m) / 60) * (1 + P.staffEff(S, 'champcoach')) * U.rand(0.8, 1.2) * (pl.energy >= 40 ? 1 : 0.6);
       pl.mastery[champ] = U.round1(Math.min(100, m + g));
       msg = `Maestría con ${D.champName(champ)} +${g.toFixed(1)}`;
     } else if (id === 'soloq') {
       msg = P.playSoloQ(S);
     } else if (id === 'stream') {
-      const cm = P.hasStaff(S, 'cm') ? 1.4 : 1;
+      const cm = 1 + P.staffEff(S, 'cm');
       const fans = Math.round((15 + P.ovr(S) * 0.5 + Math.sqrt(pl.fans) * 0.6) * U.rand(0.6, 1.4) * cm * (S.amateur ? 0.6 : 1) * (1 + P.luck(S) / 50));
       const money = Math.round(((S.amateur ? 10 : 30) + Math.min(2500, Math.sqrt(pl.fans) * 1.2) * (S.amateur ? 0.4 : 1)) * U.rand(0.8, 1.2));
       pl.fans += fans;
@@ -357,7 +359,9 @@
       }
       pl.stats.champs[g.champ] = (pl.stats.champs[g.champ] || 0) + 1;
       pl.mastery[g.champ] = U.round1(Math.min(100, P.mastery(S, g.champ) + 0.8));
-      for (const a of C.ATTRS) pl.attrs[a.id] = U.round1(Math.min(99, pl.attrs[a.id] + 0.015 * P.ageMult(pl.age) * Math.max(0.1, (100 - pl.attrs[a.id]) / 30)));
+      // Jugar bien también mejora (menos que entrenar)
+      const pg = (0.01 + Math.max(0, g.rating - 6.5) * 0.025) * P.ageMult(pl.age);
+      for (const a of C.ATTRS) pl.attrs[a.id] = U.round1(Math.min(99, pl.attrs[a.id] + pg * Math.max(0.1, (100 - pl.attrs[a.id]) / 30)));
       pl.energy = Math.max(0, pl.energy - 5);
       if (!bestMvp || g.rating > bestMvp.rating) bestMvp = g;
     }
@@ -370,18 +374,32 @@
     pl.fans += fans;
     res.fans = fans;
     let dm = won ? 4 : -5;
-    if (!won && P.hasStaff(S, 'psico')) dm = -2.5;
+    if (!won && P.hasStaff(S, 'psico')) dm = [-2.5, -2, -1.5][P.staffTier(S, 'psico') - 1];
     if (res.mvp) dm += 4;
     pl.morale = U.clamp(pl.morale + dm, 0, 100);
   };
 
-  P.addTitle = function (S, name, fans, prize) {
+  // Sube todos los atributos (títulos y premios). Rinde menos cuanto más alto es el atributo.
+  P.boostAll = function (S, amount) {
+    let total = 0;
+    for (const a of C.ATTRS) {
+      const v = S.pl.attrs[a.id];
+      const g = amount * Math.max(0.25, (100 - v) / 25);
+      S.pl.attrs[a.id] = U.round1(Math.min(99, v + g));
+      total += g;
+    }
+    S.pl.peakOvr = Math.max(S.pl.peakOvr, P.ovr(S));
+    return total / C.ATTRS.length;
+  };
+
+  P.addTitle = function (S, name, fans, prize, boost = 0.5) {
+    const b = P.boostAll(S, boost);
     S.pl.titles.push({ year: S.year, name });
     S.pl.fans += fans;
     S.pl.money += prize;
     S.pl.earned += prize;
     S.pl.morale = Math.min(100, S.pl.morale + 15);
-    news(S, `¡CAMPEONES! Ganas ${name}. +${U.money(prize)} en premios.`, 'good');
+    news(S, `¡CAMPEONES! Ganas ${name}. +${U.money(prize)} en premios y +${b.toFixed(1)} a todos tus atributos.`, 'good');
     S.pl.history.push({ year: S.year, text: `Campeón: ${name}.` });
   };
 
@@ -401,10 +419,12 @@
       if (U.chance(mvpChance)) {
         pl.awards.push({ year: S.year, name: `MVP de la ${splitName}` });
         pl.fans += Math.round(15000 / L.tier);
-        news(S, `Te nombran MVP de la ${splitName}.`, 'good');
+        const b = P.boostAll(S, 0.6);
+        news(S, `Te nombran MVP de la ${splitName}. +${b.toFixed(1)} a todos tus atributos.`, 'good');
       } else if (avg >= 7.1) {
         pl.awards.push({ year: S.year, name: `Equipo ideal de la ${splitName}` });
-        news(S, `Entras en el equipo ideal de la ${splitName}.`, 'good');
+        const b = P.boostAll(S, 0.3);
+        news(S, `Entras en el equipo ideal de la ${splitName}. +${b.toFixed(1)} a todos tus atributos.`, 'good');
       }
     }
     pl.history.push({ year: S.year, text: `${RC.Season.SPLIT_NAME[phase]}: ${place}º en la ${L.name} con ${team ? team.name : '—'}${st && st.g ? ` · nota media ${avg.toFixed(1)}` : ''}.` });
@@ -434,14 +454,15 @@
   P.onIntlEnd = function (S, id, name, place) {
     const pl = S.pl;
     const nm = `${name} ${S.year}`;
-    if (place === 1) P.addTitle(S, nm, id === 'worlds' ? 400000 : id === 'msi' ? 150000 : 30000, id === 'worlds' ? 150000 : id === 'msi' ? 60000 : 8000);
+    if (place === 1) P.addTitle(S, nm, id === 'worlds' ? 400000 : id === 'msi' ? 150000 : 30000, id === 'worlds' ? 150000 : id === 'msi' ? 60000 : 8000, id === 'worlds' ? 1.2 : id === 'msi' ? 0.8 : 0.4);
     else news(S, `${name}: terminas en ${place === 2 ? 'segunda posición' : place <= 4 ? 'semifinales' : place <= 8 ? 'cuartos de final' : 'fase de grupos'}.`, place <= 2 ? 'good' : '');
     pl.history.push({ year: S.year, text: `${nm}: ${place === 1 ? 'campeón' : place === 2 ? 'finalista' : place <= 4 ? 'semifinales' : place <= 8 ? 'cuartos' : 'fase de grupos'}.` });
     if (id === 'worlds' && place === 1) {
       const st = pl.stats.seasons[`${S.year} Worlds`];
       if (st && st.g && st.r / st.g >= 7.4 && U.chance(0.5)) {
         pl.awards.push({ year: S.year, name: `MVP de las Worlds ${S.year}` });
-        news(S, `¡Eres el MVP de las Worlds ${S.year}!`, 'good');
+        const b = P.boostAll(S, 1);
+        news(S, `¡Eres el MVP de las Worlds ${S.year}! +${b.toFixed(1)} a todos tus atributos.`, 'good');
       }
     }
   };
@@ -458,7 +479,7 @@
     const team = S.world.teams[tid];
     const base = P.salaryFor(S, team.league);
     const offered = Math.round((base * U.rand(0.8, 0.95)) / 500) * 500;
-    const max = base * U.rand(1.1, 1.35) * (P.hasStaff(S, 'agente') ? 1.12 : 1);
+    const max = base * U.rand(1.1, 1.35) * (1 + P.staffEff(S, 'agente'));
     const offer = {
       id: U.uid(), teamId: tid, salary: Math.max(500, offered), max, years: opts.years || U.randInt(1, 3),
       attempts: 3, expires: S.turn + (opts.ttl || 3), renewal: !!opts.renewal, academy: !!opts.academy, year: S.year,
@@ -563,25 +584,83 @@
     return { ok: true, msg: `Compras: ${g.levels[lvl]}.` };
   };
 
-  P.staffCost = function (S, id) {
+  // Coste por turno (semana; en la etapa amateur, mes) de un miembro del staff en un nivel
+  P.staffCost = function (S, id, tier = P.staffTier(S, id) || 1) {
     const s = C.STAFF.find((x) => x.id === id);
-    if (s.pct) return Math.max(100, Math.round(((S.pl.contract ? S.pl.contract.salary : 0) / TURNS_PRO) * s.pct));
-    return s.cost * (S.amateur ? 4 : 1);
+    if (s.pct) return Math.max(100, Math.round(((S.pl.contract ? S.pl.contract.salary : 0) / TURNS_PRO) * s.pct[tier - 1]));
+    return Math.round(s.cost * C.STAFF_TIER_COST[tier - 1]) * (S.amateur ? 4 : 1);
   };
 
-  P.toggleStaff = function (S, id) {
-    if (S.pl.staff[id]) {
+  P.setStaff = function (S, id, tier) {
+    const s = C.STAFF.find((x) => x.id === id);
+    if (!tier) {
       delete S.pl.staff[id];
-      return { ok: true, msg: 'Contrato rescindido.' };
+      return { ok: true, msg: `${s.name}: contrato rescindido.` };
     }
-    const cost = P.staffCost(S, id);
-    if (S.pl.money < cost) return { ok: false, msg: 'Necesitas al menos una semana de sueldo en la cuenta.' };
-    S.pl.staff[id] = true;
-    return { ok: true, msg: 'Contratado.' };
+    const cost = P.staffCost(S, id, tier);
+    if (S.pl.money < cost) return { ok: false, msg: 'Necesitas al menos un pago en la cuenta para contratarlo.' };
+    S.pl.staff[id] = tier;
+    return { ok: true, msg: `${s.name} (${C.STAFF_TIERS[tier - 1]}) contratado.` };
+  };
+  P.toggleStaff = (S, id) => P.setStaff(S, id, P.hasStaff(S, id) ? 0 : 1);
+
+  // ---------- Experiencias ----------
+  P.periodKey = (S) => {
+    if (S.amateur) return `${S.year}-${Math.floor(S.turn / 4)}`;
+    const t = S.cal[S.turn];
+    const grp = { pre: 'winter', winter: 'winter', spring: 'spring', msi: 'summer', summer: 'summer', worlds: 'off', off: 'off' }[t.phase];
+    return `${S.year}-${grp}`;
+  };
+  P.expAvailable = function (S, id) {
+    const e = C.EXPERIENCES.find((x) => x.id === id);
+    if (e.once) return !S.pl.sede;
+    return (S.pl.expUsed || {})[id] !== P.periodKey(S);
+  };
+  P.buyExperience = function (S, id) {
+    const e = C.EXPERIENCES.find((x) => x.id === id);
+    const pl = S.pl;
+    if (!P.expAvailable(S, id)) return { ok: false, msg: e.once ? 'Ya la tienes.' : 'Ya la has hecho este split. Vuelve en el siguiente.' };
+    if (pl.money < e.price) return { ok: false, msg: 'No tienes dinero suficiente.' };
+    pl.money -= e.price;
+    if (e.once) { pl.sede = true; return { ok: true, msg: `${e.name}: +10 % a todo tu entrenamiento.` }; }
+    pl.expUsed = pl.expUsed || {};
+    pl.expUsed[id] = P.periodKey(S);
+    const parts = [];
+    for (const [k, v] of Object.entries(e.gains || {})) {
+      const ids = k === 'all' ? C.ATTRS.map((a) => a.id) : [k];
+      let tot = 0;
+      for (const a of ids) {
+        const g = v * Math.max(0.25, (100 - pl.attrs[a]) / 25);
+        pl.attrs[a] = U.round1(Math.min(99, pl.attrs[a] + g));
+        tot += g;
+      }
+      parts.push(`${k === 'all' ? 'Todo' : C.ATTR_NAME[k]} +${(tot / ids.length).toFixed(1)}`);
+    }
+    if (e.mastery) for (const c of pl.pool) pl.mastery[c] = U.round1(Math.min(100, P.mastery(S, c) + e.mastery));
+    if (e.morale) pl.morale = Math.min(100, pl.morale + e.morale);
+    pl.peakOvr = Math.max(pl.peakOvr, P.ovr(S));
+    return { ok: true, msg: `${e.name}: ${parts.join(' · ')}` };
+  };
+
+  // ---------- Presupuesto por turno ----------
+  P.budget = function (S) {
+    const pl = S.pl;
+    const items = [];
+    if (pl.contract) items.push({ label: 'Sueldo', amount: pl.contract.salary / TURNS_PRO });
+    if (S.amateur) items.push({ label: 'Paga de tus padres', amount: 60 });
+    const weeks = S.amateur ? 4 : 1;
+    for (const sp of pl.sponsors) items.push({ label: sp.name, amount: sp.pay * weeks * (pl.streams >= 3 ? 1.1 : 1) });
+    for (const id of Object.keys(pl.staff)) {
+      const st = C.STAFF.find((x) => x.id === id);
+      items.push({ label: `${st.name} (${C.STAFF_TIERS[P.staffTier(S, id) - 1]})`, amount: -P.staffCost(S, id) });
+    }
+    const income = U.sum(items.filter((i) => i.amount > 0).map((i) => i.amount));
+    const costs = -U.sum(items.filter((i) => i.amount < 0).map((i) => i.amount));
+    return { unit: S.amateur ? 'mes' : 'semana', items, income, costs, net: income - costs };
   };
 
   // ---------- Patrocinadores ----------
-  P.maxSponsors = (S) => 3 + (P.hasStaff(S, 'cm') ? 1 : 0);
+  P.maxSponsors = (S) => 3 + P.staffTier(S, 'cm');
   P.genSponsorOffers = function (S) {
     const pl = S.pl;
     if (pl.fans < 3000 || pl.sponsors.length >= P.maxSponsors(S)) return;
@@ -590,7 +669,7 @@
     const chance = 0.35 + (P.hasStaff(S, 'cm') ? 0.15 : 0) + (P.hasStaff(S, 'agente') ? 0.1 : 0);
     if (!free.length || !U.chance(chance)) return;
     const b = U.pick(free);
-    const mult = P.hasStaff(S, 'agente') ? 1.15 : 1;
+    const mult = 1 + P.staffEff(S, 'agente');
     const pay = Math.round(Math.min(3000, 40 + pl.fans * 0.002) * U.rand(0.8, 1.2) * mult / 10) * 10;
     S.sponsorOffers.push({ id: U.uid(), name: b.name, kind: b.kind, pay, promos: pay > 800 ? 2 : 1, splits: U.randInt(2, 3), expires: S.turn + 4 });
     news(S, `${b.name} quiere patrocinarte.`, 'good');
@@ -657,24 +736,17 @@
     const pl = S.pl;
     const report = { user: null, headlines: [], events: [], label: RC.Season.turnLabel(S), date: RC.Season.turnDate(S).text };
     const t = S.cal[S.turn];
-    if (!S.amateur && t.kind === 'reg' && t.round === 0) {
-      P.newPatch(S);
-      report.events.push(`Nuevo parche ${S.patch.ver}.`);
-    }
     // Partidos de todo el mundo
     if (!S.amateur) {
       const r = RC.Season.playTurn(S);
       report.user = r.user;
       report.headlines = r.headlines;
+      report.events.push(...r.events);
       if (t.kind === 'po' && t.round === 2) P.checkSponsors(S);
     } else if (S.turn % 4 === 3) P.checkSponsors(S);
     // Economía
-    const weeks = S.amateur ? 4 : 1;
-    let income = 0, costs = 0;
-    if (pl.contract) income += pl.contract.salary / TURNS_PRO;
-    if (S.amateur) income += 60;
-    for (const sp of pl.sponsors) income += sp.pay * weeks * (pl.streams >= 3 ? 1.1 : 1);
-    for (const id of Object.keys(pl.staff)) costs += P.staffCost(S, id);
+    const bud = P.budget(S);
+    const income = bud.income, costs = bud.costs;
     pl.money += income - costs;
     pl.earned += income;
     report.income = income; report.costs = costs;
@@ -688,7 +760,7 @@
       pl.money = Math.max(pl.money, -2000);
     }
     // Energía y moral
-    pl.energy = Math.min(100, pl.energy + (S.amateur ? 45 : 25) + (P.hasStaff(S, 'nutri') ? 12 : 0));
+    pl.energy = Math.min(100, pl.energy + 25 + P.staffEff(S, 'nutri') + P.staffEff(S, 'fisico'));
     pl.morale = U.clamp(pl.morale + (60 - pl.morale) * 0.05, 0, 100);
     pl.actionsUsed = 0;
     // Evento
@@ -716,6 +788,7 @@
       if (S.turn % 3 === 0) P.genSponsorOffers(S);
     } else {
       proTurnStart(S, report);
+      if (!S.over) report.events.push(...RC.Season.prepareTurn(S));
     }
     pl.peakOvr = Math.max(pl.peakOvr, P.ovr(S));
     S.lastReport = report;
@@ -762,7 +835,8 @@
     S.turn = 0;
     pl.age++;
     // Declive por edad
-    const decl = pl.age < 27 ? 0 : [0.3, 0.6, 1.0, 1.4, 1.8, 2.3][pl.age - 27] || 3;
+    const ft = P.staffTier(S, 'fisico');
+    const decl = (pl.age < 27 ? 0 : [0.3, 0.6, 1.0, 1.4, 1.8, 2.3][pl.age - 27] || 3) * (1 - (ft ? C.STAFF[1].dec[ft - 1] : 0));
     if (decl) {
       for (const a of C.ATTRS) {
         const k = a.group === 'mech' ? 1.3 : a.group === 'ment' ? 0.5 : 0.9;

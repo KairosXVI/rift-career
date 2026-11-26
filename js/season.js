@@ -139,46 +139,87 @@
     return res;
   }
 
+  // Prepara la jornada actual: crea calendario, cuadros y cruces antes de jugarla,
+  // para que el rival se vea con antelación. Es idempotente.
+  Season.prepareTurn = function (S) {
+    const t = S.cal[S.turn];
+    const ev = [];
+    if (!t || t.phase === 'amateur' || !S.world) return ev;
+    if (!S.comp || S.comp.year !== S.year) Season.newComp(S);
+    if (['winter', 'spring', 'summer'].includes(t.phase)) {
+      if (t.kind === 'reg') {
+        if (!S.comp.split || S.comp.split.id !== t.phase) {
+          RC.P.newPatch(S);
+          ev.push(`Nuevo parche ${S.patch.ver}: revisa el meta en Campeones.`);
+          initSplit(S, t.phase);
+        }
+      } else {
+        for (const L of Object.values(S.comp.split.leagues)) {
+          if (!L.po) initPlayoffs(L);
+          if (t.round >= 1 && !L.po.rounds[1].length) {
+            const w = L.po.rounds[0].map((m) => m.res.winner);
+            L.po.rounds[1] = [mk(L.po.seeds[0], w[1], 5), mk(L.po.seeds[1], w[0], 5)];
+          }
+          if (t.round >= 2 && !L.po.rounds[2].length) {
+            const w = L.po.rounds[1].map((m) => m.res.winner);
+            L.po.rounds[2] = [mk(w[0], w[1], 5)];
+          }
+        }
+      }
+    } else if (t.phase === 'msi') {
+      if (!S.comp.msi) initMSI(S);
+      for (const e of [S.comp.msi, S.comp.emea]) nextBracketRounds(e, t.round);
+    } else if (t.phase === 'worlds') {
+      if (!S.comp.worlds) initWorlds(S);
+      const wd = S.comp.worlds;
+      if (t.round >= 3) {
+        if (!wd.rounds[0].length) {
+          const gt = wd.groups.map((g) => Season.groupTable(wd, g).map((x) => x.tid));
+          wd.rounds[0] = [mk(gt[0][0], gt[1][1], 5), mk(gt[2][0], gt[3][1], 5), mk(gt[1][0], gt[0][1], 5), mk(gt[3][0], gt[2][1], 5)];
+        }
+        nextBracketRounds(wd, t.round - 3);
+      }
+    }
+    return ev;
+  };
+
+  function nextBracketRounds(e, round) {
+    if (round >= 1 && !e.rounds[1].length) {
+      const w = e.rounds[0].map((m) => m.res.winner);
+      e.rounds[1] = [mk(w[0], w[1], 5), mk(w[2], w[3], 5)];
+    }
+    if (round >= 2 && !e.rounds[2].length) {
+      const w = e.rounds[1].map((m) => m.res.winner);
+      e.rounds[2] = [mk(w[0], w[1], 5)];
+    }
+  }
+
   Season.userFixture = function (S, t = S.cal[S.turn]) {
     const uid = S.pl.teamId;
     if (!uid || !t || !S.comp) return null;
     const team = S.world.teams[uid];
     const find = (list) => (list || []).find((m) => m.a === uid || m.b === uid);
+    const label = Season.turnLabel(S, t);
     if (['winter', 'spring', 'summer'].includes(t.phase)) {
-      if (t.kind === 'reg') {
-        if (t.round === 0 && (!S.comp.split || S.comp.split.id !== t.phase)) return { pending: true, bo: 1, label: Season.turnLabel(S, t) };
-        const L = S.comp.split && S.comp.split.leagues[team.league];
-        const m = L && find(L.sched[t.round]);
-        return m ? { a: m.a, b: m.b, bo: 1, label: Season.turnLabel(S, t) } : null;
-      }
-      const L = S.comp.split && S.comp.split.leagues[team.league];
+      const L = S.comp.split && S.comp.split.id === t.phase && S.comp.split.leagues[team.league];
       if (!L) return null;
-      if (t.round === 0 && !L.po) {
-        const top = Season.sortedTable(L).slice(0, 6).map((r) => r.tid);
-        if (!top.includes(uid)) return null;
-        const idx = top.indexOf(uid);
-        if (idx < 2) return { bye: true, label: Season.turnLabel(S, t) };
-        const pair = { 2: 5, 5: 2, 3: 4, 4: 3 }[idx];
-        return { a: uid, b: top[pair], bo: 5, label: Season.turnLabel(S, t) };
+      if (t.kind === 'reg') {
+        const m = find(L.sched[t.round]);
+        return m ? { a: m.a, b: m.b, bo: 1, label } : null;
       }
       const m = L.po && find(L.po.rounds[t.round]);
-      if (m) return { a: m.a, b: m.b, bo: 5, label: Season.turnLabel(S, t) };
-      if (t.round === 1 && L.po && L.po.seeds.slice(0, 2).includes(uid)) return { pending: true, bo: 5, label: Season.turnLabel(S, t) };
+      if (m) return { a: m.a, b: m.b, bo: 5, label };
+      if (t.round === 0 && L.po && L.po.seeds.slice(0, 2).includes(uid)) return { bye: true, label };
       return null;
     }
     if (t.phase === 'msi' || t.phase === 'worlds') {
-      const ev = t.phase === 'msi' ? S.comp.msi || S.comp.emea : S.comp.worlds;
       const all = t.phase === 'msi' ? [S.comp.msi, S.comp.emea] : [S.comp.worlds];
       for (const e of all) {
         if (!e) continue;
-        if (!e.seeds.includes(uid) && !(e.groups && e.groups.some((g) => g.includes(uid)))) continue;
-        const roundList = e.groups ? (t.round < 3 ? e.groupRounds[t.round] : e.rounds[t.round - 3]) : e.rounds[t.round];
-        const m = find(roundList);
-        if (m) return { a: m.a, b: m.b, bo: m.bo, label: (e.name || '') + ' · ' + Season.turnLabel(S, t).split('· ')[1] };
-        return null;
+        const list = e.groups ? (t.round < 3 ? e.groupRounds[t.round] : e.rounds[t.round - 3]) : e.rounds[t.round];
+        const m = find(list);
+        if (m) return { a: m.a, b: m.b, bo: m.bo, label: e.name + ' · ' + label.split('· ')[1] };
       }
-      if (!ev && t.round === 0) return null;
-      return null;
     }
     return null;
   };
@@ -186,15 +227,15 @@
   // Juega la jornada actual para todo el mundo
   Season.playTurn = function (S) {
     const t = S.cal[S.turn];
-    const report = { user: null, headlines: [] };
+    const report = { user: null, headlines: [], events: [] };
     if (!t || t.phase === 'amateur') return report;
+    report.events = Season.prepareTurn(S);
     W.tickForm(S);
-    if (t.phase === 'pre' && t.round === 0) Season.newComp(S);
     if (['winter', 'spring', 'summer'].includes(t.phase)) {
       if (t.kind === 'reg') {
-        if (t.round === 0) initSplit(S, t.phase);
         for (const [lg, L] of Object.entries(S.comp.split.leagues)) {
           for (const m of L.sched[t.round]) {
+            if (m.res) continue;
             m.bo = 1;
             const r = play(S, m, { comp: C.LEAGUES[lg].name, label: Season.turnLabel(S, t) }, report);
             const ta = L.table[m.a], tb = L.table[m.b];
@@ -205,24 +246,13 @@
         }
       } else {
         for (const [lg, L] of Object.entries(S.comp.split.leagues)) {
-          if (t.round === 0) initPlayoffs(L);
-          if (t.round === 1) {
-            const w = L.po.rounds[0].map((m) => m.res.winner);
-            L.po.rounds[1] = [mk(L.po.seeds[0], w[1], 5), mk(L.po.seeds[1], w[0], 5)];
-          }
-          if (t.round === 2) {
-            const w = L.po.rounds[1].map((m) => m.res.winner);
-            L.po.rounds[2] = [mk(w[0], w[1], 5)];
-          }
-          for (const m of L.po.rounds[t.round]) play(S, m, { comp: C.LEAGUES[lg].name, label: Season.turnLabel(S, t), playoff: true }, report);
-          if (t.round === 2) finishSplit(S, t.phase, lg, L, report);
+          for (const m of L.po.rounds[t.round]) if (!m.res) play(S, m, { comp: C.LEAGUES[lg].name, label: Season.turnLabel(S, t), playoff: true }, report);
+          if (t.round === 2 && !L.champion) finishSplit(S, t.phase, lg, L, report);
         }
       }
     } else if (t.phase === 'msi') {
-      if (t.round === 0) initMSI(S);
       for (const ev of [S.comp.msi, S.comp.emea]) playBracketRound(S, ev, t.round, report);
     } else if (t.phase === 'worlds') {
-      if (t.round === 0) initWorlds(S);
       playWorldsRound(S, S.comp.worlds, t.round, report);
     }
     return report;
@@ -252,21 +282,12 @@
     const msi = [sp('LCK', 1), sp('LPL', 1), sp('LEC', 1), sp('LCS', 1), sp('LCK', 2).slice(1), sp('LPL', 2).slice(1), sp('LEC', 2).slice(1), sp('LCP', 1)].flat();
     S.comp.msi = Object.assign(bracket8(msi), { name: 'MSI', id: 'msi' });
     const em = [sp('LES', 1), sp('LFL', 1), sp('PL', 1), sp('NLC', 1), sp('TCL', 1), sp('LES', 2).slice(1), sp('LFL', 2).slice(1), sp('PL', 2).slice(1)].flat();
-    const emOrder = [em[0], em[1], em[2], em[3], em[4], em[5], em[6], em[7]];
-    S.comp.emea = Object.assign(bracket8(U.shuffle(emOrder)), { name: 'EMEA Masters', id: 'emea' });
+    S.comp.emea = Object.assign(bracket8(U.shuffle(em)), { name: 'EMEA Masters', id: 'emea' });
   }
 
   function playBracketRound(S, ev, round, report) {
-    if (round === 1) {
-      const w = ev.rounds[0].map((m) => m.res.winner);
-      ev.rounds[1] = [mk(w[0], w[1], 5), mk(w[2], w[3], 5)];
-    }
-    if (round === 2) {
-      const w = ev.rounds[1].map((m) => m.res.winner);
-      ev.rounds[2] = [mk(w[0], w[1], 5)];
-    }
-    for (const m of ev.rounds[round]) play(S, m, { comp: ev.name, label: ev.name, playoff: true, intl: ev.id }, report);
-    if (round === 2) {
+    for (const m of ev.rounds[round]) if (!m.res) play(S, m, { comp: ev.name, label: ev.name, playoff: true, intl: ev.id }, report);
+    if (round === 2 && !ev.champion) {
       const f = ev.rounds[2][0].res;
       ev.champion = f.winner;
       report.headlines.push(`${S.world.teams[f.winner].name} se proclama campeón del ${ev.name}.`);
@@ -308,42 +329,27 @@
 
   function playWorldsRound(S, ev, round, report) {
     const ctx = { comp: 'Worlds', label: 'Worlds', intl: 'worlds' };
+    const uid = S.pl.teamId;
     if (round < 3) {
       for (const m of ev.groupRounds[round]) {
+        if (m.res) continue;
         const r = play(S, m, Object.assign({}, ctx, { label: 'Worlds · Fase de grupos' }), report);
         const ta = ev.table[m.a], tb = ev.table[m.b];
         (r.winner === m.a ? ta : tb).w++;
         (r.winner === m.a ? tb : ta).l++;
         ta.gw += r.sa; ta.gl += r.sb; tb.gw += r.sb; tb.gl += r.sa;
       }
-      if (round === 2) {
-        const uid = S.pl.teamId;
-        const gt = ev.groups.map((g) => Season.groupTable(ev, g).map((r) => r.tid));
-        if (uid && ev.seeds.includes(uid)) {
-          const g = gt.find((x) => x.includes(uid));
-          if (g.indexOf(uid) >= 2) RC.P.onIntlEnd(S, 'worlds', 'Worlds', 9);
-        }
+      if (round === 2 && uid && ev.seeds.includes(uid)) {
+        const g = ev.groups.map((x) => Season.groupTable(ev, x).map((r) => r.tid)).find((x) => x.includes(uid));
+        if (g.indexOf(uid) >= 2) RC.P.onIntlEnd(S, 'worlds', 'Worlds', 9);
       }
       return;
     }
     const r = round - 3;
-    if (r === 0) {
-      const gt = ev.groups.map((g) => Season.groupTable(ev, g).map((x) => x.tid));
-      ev.rounds[0] = [mk(gt[0][0], gt[1][1], 5), mk(gt[2][0], gt[3][1], 5), mk(gt[1][0], gt[0][1], 5), mk(gt[3][0], gt[2][1], 5)];
-    }
-    if (r === 1) {
-      const w = ev.rounds[0].map((m) => m.res.winner);
-      ev.rounds[1] = [mk(w[0], w[1], 5), mk(w[2], w[3], 5)];
-    }
-    if (r === 2) {
-      const w = ev.rounds[1].map((m) => m.res.winner);
-      ev.rounds[2] = [mk(w[0], w[1], 5)];
-    }
-    for (const m of ev.rounds[r]) play(S, m, Object.assign({}, ctx, { label: 'Worlds · ' + ['Cuartos', 'Semifinales', 'Final'][r], playoff: true }), report);
-    const uid = S.pl.teamId;
+    for (const m of ev.rounds[r]) if (!m.res) play(S, m, Object.assign({}, ctx, { label: 'Worlds · ' + ['Cuartos', 'Semifinales', 'Final'][r], playoff: true }), report);
     if (r === 0 && uid && ev.rounds[0].some((m) => m.res.loser === uid)) RC.P.onIntlEnd(S, 'worlds', 'Worlds', 5);
     if (r === 1 && uid && ev.rounds[1].some((m) => m.res.loser === uid)) RC.P.onIntlEnd(S, 'worlds', 'Worlds', 3);
-    if (r === 2) {
+    if (r === 2 && !ev.champion) {
       const f = ev.rounds[2][0].res;
       ev.champion = f.winner;
       report.headlines.push(`${S.world.teams[f.winner].name} es CAMPEÓN DEL MUNDO ${S.year}.`);

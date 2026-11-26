@@ -105,31 +105,45 @@
 
   // Tienda: 5 niveles por objeto
   C.GEAR = [
-    { id: 'raton', name: 'Ratón', boost: { mecanicas: 0.08 }, match: 0.35, prices: [60, 180, 450, 1100, 2800],
+    { id: 'raton', name: 'Ratón', boost: { mecanicas: 0.08 }, match: 0.35, prices: [60, 180, 450, 3300, 16800],
       levels: ['Ratón de oficina', 'Ratón gaming básico', 'Ratón ligero 59 g', 'Ratón pro inalámbrico', 'Ratón de fibra de carbono a medida'] },
-    { id: 'teclado', name: 'Teclado', boost: { farmeo: 0.08 }, match: 0.25, prices: [50, 150, 380, 900, 2200],
+    { id: 'teclado', name: 'Teclado', boost: { farmeo: 0.08 }, match: 0.25, prices: [50, 150, 380, 2700, 13200],
       levels: ['Teclado de membrana', 'Mecánico básico', 'Mecánico TKL', 'Magnético de respuesta rápida', 'Custom de competición'] },
-    { id: 'monitor', name: 'Monitor', boost: { vision: 0.07, mecanicas: 0.03 }, match: 0.3, prices: [120, 300, 700, 1500, 3500],
+    { id: 'monitor', name: 'Monitor', boost: { vision: 0.07, mecanicas: 0.03 }, match: 0.3, prices: [120, 300, 700, 4500, 21000],
       levels: ['60 Hz', '144 Hz', '240 Hz', '360 Hz OLED', '540 Hz de torneo'] },
-    { id: 'auriculares', name: 'Auriculares', boost: { comunicacion: 0.08 }, match: 0.2, prices: [40, 120, 300, 700, 1600],
+    { id: 'auriculares', name: 'Auriculares', boost: { comunicacion: 0.08 }, match: 0.2, prices: [40, 120, 300, 2100, 9600],
       levels: ['Cascos baratos', 'Headset gaming', 'Sonido envolvente', 'Inalámbricos pro', 'IEM de estudio'] },
-    { id: 'silla', name: 'Silla', boost: {}, energySave: 0.06, match: 0, prices: [70, 220, 500, 1100, 2400],
+    { id: 'silla', name: 'Silla', boost: {}, energySave: 0.06, match: 0, prices: [70, 220, 500, 3300, 14400],
       levels: ['Silla de cocina', 'Silla gaming', 'Silla ergonómica', 'Silla de oficina premium', 'Silla hecha a medida'] },
-    { id: 'pc', name: 'PC', boost: { all: 0.03 }, luck: 1, match: 0.3, prices: [300, 800, 1600, 3000, 6000],
+    { id: 'pc', name: 'PC', boost: { all: 0.03 }, luck: 1, match: 0.3, prices: [300, 800, 1600, 9000, 36000],
       levels: ['Portátil viejo', 'PC de gama media', 'PC gaming', 'PC de gama alta', 'Bestia de última generación'] },
-    { id: 'internet', name: 'Conexión', boost: {}, luck: 2, match: 0.15, prices: [30, 100, 250, 600, 1400],
+    { id: 'internet', name: 'Conexión', boost: {}, luck: 2, match: 0.15, prices: [30, 100, 250, 1800, 8400],
       levels: ['WiFi compartido', 'Fibra 300 Mb', 'Fibra 1 Gb', 'Fibra simétrica + router gaming', 'Línea dedicada de baja latencia'] },
   ];
 
-  // Staff personal (coste por semana)
+  // Staff personal (coste por semana). Tres niveles: Básico, Profesional y Élite.
+  C.STAFF_TIERS = ['Básico', 'Profesional', 'Élite'];
+  C.STAFF_TIER_COST = [1, 3.5, 9];
   C.STAFF = [
-    { id: 'coach', name: 'Entrenador personal', cost: 350, desc: '+1 acción por semana y +10 % a todo el entrenamiento.' },
-    { id: 'psico', name: 'Psicólogo deportivo', cost: 200, desc: '+25 % a Mentalidad. Las derrotas bajan la mitad de moral.' },
-    { id: 'nutri', name: 'Nutricionista y fisio', cost: 160, desc: '+12 de energía recuperada cada semana.' },
-    { id: 'analista', name: 'Analista de vídeo', cost: 260, desc: '+25 % a Macro y Visión.' },
-    { id: 'champcoach', name: 'Coach de campeones', cost: 180, desc: '+40 % de maestría al practicar campeones.' },
-    { id: 'cm', name: 'Community manager', cost: 140, desc: '+40 % de seguidores en streams y más interés de patrocinadores.' },
-    { id: 'agente', name: 'Agente', cost: 0, pct: 0.08, desc: 'Cobra el 8 % de tu sueldo. Mejores contratos y más ofertas.' },
+    { id: 'coach', name: 'Entrenador personal', cost: 400, eff: [0.10, 0.20, 0.30], desc: (v) => `+1 acción por semana y +${Math.round(v * 100)} % a todo el entrenamiento.` },
+    { id: 'fisico', name: 'Preparador físico', cost: 300, eff: [5, 8, 12], dec: [0.25, 0.45, 0.65], desc: (v, t) => `+${v} de energía cada semana. Frena un ${Math.round(C.STAFF[1].dec[t] * 100)} % el declive por edad.` },
+    { id: 'psico', name: 'Psicólogo deportivo', cost: 250, eff: [0.25, 0.45, 0.70], desc: (v) => `+${Math.round(v * 100)} % a Mentalidad. Las derrotas bajan menos la moral.` },
+    { id: 'nutri', name: 'Nutricionista', cost: 180, eff: [12, 17, 22], desc: (v) => `+${v} de energía recuperada cada semana.` },
+    { id: 'analista', name: 'Analista de vídeo', cost: 300, eff: [0.25, 0.45, 0.70], desc: (v) => `+${Math.round(v * 100)} % a Macro y Visión.` },
+    { id: 'champcoach', name: 'Coach de campeones', cost: 220, eff: [0.40, 0.70, 1.00], desc: (v) => `+${Math.round(v * 100)} % de maestría al practicar campeones.` },
+    { id: 'cm', name: 'Community manager', cost: 160, eff: [0.40, 0.70, 1.00], desc: (v) => `+${Math.round(v * 100)} % de seguidores en streams y más patrocinadores.` },
+    { id: 'agente', name: 'Agente', cost: 0, pct: [0.08, 0.10, 0.12], eff: [0.12, 0.20, 0.30], desc: (v, t) => `Cobra el ${Math.round(C.STAFF[7].pct[t] * 100)} % de tu sueldo. +${Math.round(v * 100)} % en lo que pueden pagarte y más ofertas.` },
+  ];
+
+  // Experiencias: compras de un solo uso, una vez por split cada una
+  C.EXPERIENCES = [
+    { id: 'campus', name: 'Campus de verano para promesas', price: 600, gains: { mecanicas: 1.2, farmeo: 1 }, desc: 'Una semana de entrenamiento con otros jóvenes.' },
+    { id: 'retiro', name: 'Retiro de concentración', price: 6000, gains: { mentalidad: 2, comunicacion: 1 }, morale: 20, desc: 'Desconectas y vuelves con la cabeza fría.' },
+    { id: 'neuro', name: 'Programa de neuroentrenamiento', price: 15000, gains: { mecanicas: 2, farmeo: 1 }, desc: 'Tiempo de reacción y precisión en laboratorio.' },
+    { id: 'analisis', name: 'Curso con un exanalista de la LCK', price: 18000, gains: { macro: 1.5, vision: 1.5 }, desc: 'Teoría de rotaciones, oleadas y visión de alto nivel.' },
+    { id: 'bootcamp_cn', name: 'Bootcamp en China', price: 30000, gains: { all: 1 }, mastery: 3, desc: 'Dos semanas de SoloQ en servidor chino y scrims.' },
+    { id: 'bootcamp_kr', name: 'Bootcamp en Corea', price: 45000, gains: { all: 1.3 }, mastery: 5, desc: 'Dos semanas en Seúl con scrims contra equipos de la LCK.' },
+    { id: 'sede', name: 'Sala de entrenamiento en casa', price: 90000, once: true, desc: 'Una sola compra: +10 % a todo el entrenamiento para siempre.' },
   ];
 
   // Rangos de SoloQ. lp total: 100 por división (IV→I).
