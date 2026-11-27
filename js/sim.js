@@ -18,7 +18,7 @@
   }
 
   // Juega un mapa. Devuelve true si gana A, y la línea de estadísticas del usuario si participa.
-  Sim.playGame = function (S, A, B) {
+  Sim.playGame = function (S, A, B, clutchP) {
     const userIn = A.roster[S.pl.role] === 'USER' ? 'A' : B.roster[S.pl.role] === 'USER' ? 'B' : null;
     let perf = 0, userEff = 0, champ = null, oppP = null;
     if (userIn) {
@@ -37,10 +37,14 @@
       });
       let e = U.avg(vals);
       if (userIn === side && S.pl.style === 'shotcaller') e += 0.4;
+      if (userIn === side && S.pl.capitan) e += 0.3;
       return e;
     };
     const diff = eff(A, 'A') - eff(B, 'B') + U.gauss() * 1.3;
-    const aWins = Math.random() < U.logistic(diff / 3.2);
+    let pA = U.logistic(diff / 3.2);
+    // Jugada clave (minijuego): fija la probabilidad de ganar este mapa
+    if (userIn && clutchP != null) pA = userIn === 'A' ? clutchP : 1 - clutchP;
+    const aWins = Math.random() < pA;
     let line = null;
     if (userIn) {
       const win = (userIn === 'A') === aWins;
@@ -113,7 +117,7 @@
     const kda = (k + a) / Math.max(1, d);
     let rating = 6.4 + perf * 0.85 + (win ? 0.5 : -0.5) + U.clamp((kda - 3) * 0.15, -0.6, 0.8);
     rating = U.clamp(U.round1(rating), 2.5, 10);
-    const penta = k >= 6 && U.chance(0.008 + (k - 6) * 0.012 + Math.max(0, perf) * 0.005);
+    const penta = k >= 6 && U.chance(0.004 + (k - 6) * 0.007 + Math.max(0, perf) * 0.003);
     if (penta) rating = Math.min(10, U.round1(rating + 0.5));
     return { win, k, d, a, cs: U.round1(cs), rating, champ, penta, opp: oppP ? oppP.name : '?', oppChamp: null };
   };
@@ -124,12 +128,22 @@
     const need = Math.ceil(bo / 2);
     let sa = 0, sb = 0;
     const games = [];
+    const userIn = A.roster[S.pl.role] === 'USER' || B.roster[S.pl.role] === 'USER';
+    if (userIn) { const st = RC.EV && RC.EV.status(S); S.pl.capitan = !!st && st.id === 'capitan'; }
+    let clutch = null;
     while (sa < need && sb < need) {
-      const g = Sim.playGame(S, A, B);
+      // El minijuego decide el mapa en el que alguien puede cerrar la serie
+      let cp = null;
+      if (userIn && S.pl.clutch && !clutch && (sa === need - 1 || sb === need - 1)) {
+        cp = 0.25 + 0.6 * S.pl.clutch.score;
+        clutch = { score: S.pl.clutch.score, reason: S.pl.clutch.reason, game: games.length };
+      }
+      const g = Sim.playGame(S, A, B, cp);
       if (g.aWins) sa++; else sb++;
-      if (g.line) games.push(g.line);
+      if (g.line) { if (cp != null) { g.line.clutch = true; clutch.won = g.line.win; } games.push(g.line); }
     }
-    return { a: aId, b: bId, sa, sb, winner: sa > sb ? aId : bId, loser: sa > sb ? bId : aId, bo, games };
+    if (clutch) delete S.pl.clutch;
+    return { a: aId, b: bId, sa, sb, winner: sa > sb ? aId : bId, loser: sa > sb ? bId : aId, bo, games, clutch };
   };
 
   RC.Sim = Sim;

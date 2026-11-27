@@ -38,6 +38,7 @@
       }
     }
     const world = { players, teams, nextId: n, retired: [] };
+    world.target = W.topMean(world);
     // Rellena huecos con jóvenes generados
     for (const team of Object.values(teams)) {
       for (const role of C.ROLES) {
@@ -53,6 +54,9 @@
 
   const SYL_A = ['Kai', 'Zen', 'Rox', 'Vex', 'Nyx', 'Ryu', 'Lux', 'Tor', 'Mav', 'Shi', 'Jin', 'Kor', 'Fae', 'Dra', 'Vel', 'Sol', 'Hex', 'Ash', 'Bly', 'Cro', 'Rin', 'Yuk', 'Tae', 'Hyu', 'Min', 'Xia', 'Lan', 'Fen', 'Gal', 'Ori', 'Pip', 'Qin', 'Sky', 'Wen', 'Zed', 'Nox', 'Ivo', 'Kas', 'Leo', 'Mio'];
   const SYL_B = ['o', 'ix', 'er', 'ah', 'en', 'ra', 'on', 'is', 'us', 'ey', 'ko', 'ma', 'ru', 'an', 'ar', 'el', 'yn', 'ze', 'ki', 'ta', '', '', ''];
+  // Media de los 200 mejores jugadores con equipo: sirve para mantener estable el nivel del mundo
+  W.topMean = (world) => U.avg(Object.values(world.players).filter((p) => p.team).map(W.ovr).sort((a, b) => b - a).slice(0, 200));
+
   W.rookieName = function (world) {
     const used = new Set(Object.values(world.players).map((p) => p.name.toLowerCase()));
     for (let i = 0; i < 50; i++) {
@@ -64,12 +68,14 @@
 
   W.newRookie = function (world, role, league) {
     const L = C.LEAGUES[league] || C.LEAGUES.LES;
-    const base = L.req - U.rand(4, 9);
+    // Algunos jóvenes salen con mucho talento y crecerán rápido
+    const talent = U.chance(0.12) ? U.rand(1.3, 1.7) : U.rand(0.8, 1.15);
+    const base = L.req - U.rand(2, 7) + (talent > 1.2 ? 3 : 0);
     const id = 'p' + world.nextId++;
     const p = {
       id, name: W.rookieName(world), role, age: U.randInt(17, 19),
       mech: U.round1(base + U.rand(-3, 4)), macro: U.round1(base + U.rand(-4, 2)), ment: U.round1(base + U.rand(-3, 3)),
-      pool: D.randomPool(role), team: null, form: 0, rookie: true,
+      pool: D.randomPool(role), team: null, form: 0, rookie: true, talent: U.round1(talent),
     };
     world.players[id] = p;
     return p;
@@ -112,8 +118,8 @@
     for (const p of Object.values(world.players)) {
       p.age += 1;
       let d;
-      if (p.age <= 20) d = U.rand(0, 3);
-      else if (p.age <= 23) d = U.rand(-0.5, 2);
+      if (p.age <= 20) d = U.rand(1, 4) * (p.talent || 1);
+      else if (p.age <= 23) d = U.rand(0, 2.5) * (p.talent || 1);
       else if (p.age <= 26) d = U.rand(-1, 1);
       else if (p.age <= 28) d = U.rand(-2, 0.5);
       else d = U.rand(-3.5, 0);
@@ -195,6 +201,17 @@
       fas.sort((a, b) => W.ovr(a) - W.ovr(b)).slice(0, fas.length - 250).forEach((p) => delete world.players[p.id]);
     }
     if (world.retired.length > 300) world.retired = world.retired.slice(-300);
+    // Recalibra el nivel global para que el mundo no se debilite con los años
+    if (world.target) {
+      const gap = world.target - W.topMean(world);
+      if (Math.abs(gap) > 0.2) {
+        for (const p of Object.values(world.players)) {
+          const k = p.age <= 25 ? 1 : 0.5;
+          const g = gap * 0.8 * k;
+          p.mech = U.round1(U.clamp(p.mech + g, 40, 99)); p.macro = U.round1(U.clamp(p.macro + g, 40, 99)); p.ment = U.round1(U.clamp(p.ment + g, 40, 99));
+        }
+      }
+    }
     // Pools: algunos jugadores cambian un campeón
     for (const p of Object.values(world.players)) {
       if (U.chance(0.4)) {

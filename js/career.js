@@ -19,7 +19,7 @@
   P.hasStaff = (S, id) => !!S.pl.staff[id];
   P.staffTier = (S, id) => (S.pl.staff[id] === true ? 1 : S.pl.staff[id] || 0);
   P.staffEff = (S, id) => { const t = P.staffTier(S, id); return t ? C.STAFF.find((x) => x.id === id).eff[t - 1] : 0; };
-  P.actionsPerTurn = (S) => 4 + (P.hasStaff(S, 'coach') ? 1 : 0);
+  P.actionsPerTurn = (S) => Math.max(1, 4 + (P.hasStaff(S, 'coach') ? 1 : 0) + (S.pl.turnMod || 0));
   P.actionsLeft = (S) => P.actionsPerTurn(S) - S.pl.actionsUsed;
   P.nation = (S) => C.NATIONS.find((n) => n.id === S.pl.nation) || C.NATIONS[0];
   P.fame = (S) => C.FAME.slice().reverse().find((f) => S.pl.fans >= f.min);
@@ -136,7 +136,14 @@
       }
     }
     team.roster[role] = 'USER';
+    if (S.pl.teamId !== tid) {
+      S.pl.clubSplits = 0;
+      S.pl.clubRel = 55;
+      S.pl.debutPending = true;
+      S.pl.teamsPlayed = (S.pl.teamsPlayed || []).filter((n) => n !== team.name).concat([team.name]);
+    }
     S.pl.teamId = tid;
+    if (contract && !contract.buyout) contract.buyout = Math.round(contract.salary * 2);
     S.pl.contract = contract;
     S.pl.freeTurns = 0;
     if (displaced) news(S, `${displaced.name} deja su puesto en ${team.name} tras tu llegada.`);
@@ -352,6 +359,7 @@
     const team = P.team(S);
     const ss = (pl.stats.seasons[key] = pl.stats.seasons[key] || Object.assign(blank(), { team: team ? team.name : '', league: ctx.comp }));
     const won = res.winner === pl.teamId;
+    pl.debutPending = false;
     let bestMvp = null;
     for (const g of res.games) {
       for (const st of [ss, pl.stats.career]) {
@@ -503,6 +511,7 @@
     const offer = {
       id: U.uid(), teamId: tid, salary: Math.max(500, offered), max, years: opts.years || U.randInt(1, 3),
       attempts: 3, expires: S.turn + (opts.ttl || 3), renewal: !!opts.renewal, academy: !!opts.academy, year: S.year,
+      buyout: !opts.renewal && S.pl.contract && S.pl.contract.endYear > S.year && S.pl.teamId !== tid ? S.pl.contract.buyout || S.pl.contract.salary * 2 : 0,
     };
     S.offers.push(offer);
     return offer;
@@ -533,7 +542,9 @@
       return P.wantsYou(S, t).ok;
     });
     for (let i = 0; i < n && cands.length; i++) {
-      const t = U.weighted(cands, (x) => 1 / C.LEAGUES[x.league].tier ** 1.5);
+      const rumored = cands.find((x) => (S.pl.rumorTeams || []).includes(x.id));
+      const t = rumored || U.weighted(cands, (x) => 1 / C.LEAGUES[x.league].tier ** 1.5);
+      if (rumored) S.pl.rumorTeams = S.pl.rumorTeams.filter((x) => x !== rumored.id);
       cands.splice(cands.indexOf(t), 1);
       P.makeOffer(S, t.id);
       news(S, `Oferta recibida de ${t.name} (${C.LEAGUES[t.league].name}).`, 'good');
@@ -667,7 +678,10 @@
     const pl = S.pl;
     const items = [];
     if (pl.contract) items.push({ label: 'Sueldo del equipo', amount: pl.contract.salary / WEEKS });
-    if (S.amateur) items.push({ label: 'Paga de tus padres', amount: 60 });
+    if (S.amateur) {
+      const castigo = (S.clock || 0) < (pl.noAllowanceUntil || 0);
+      items.push({ label: castigo ? 'Paga de tus padres (castigado)' : 'Paga de tus padres', amount: castigo ? 0 : 60 + (pl.allowanceBonus || 0) });
+    }
     const weeks = S.amateur ? 4 : 1;
     for (const sp of pl.sponsors) items.push({ label: 'Patrocinio · ' + sp.name, amount: sp.pay * weeks * (pl.streams >= 3 ? 1.1 : 1) });
     for (const id of Object.keys(pl.staff)) {
@@ -778,7 +792,11 @@
       report.user = r.user;
       report.headlines = r.headlines;
       report.events.push(...r.events);
-      if (t.kind === 'po' && t.round === 2) P.checkSponsors(S);
+      if (t.kind === 'po' && t.round === 2) {
+        P.checkSponsors(S);
+        if (pl.teamId) pl.clubSplits = (pl.clubSplits || 0) + 1;
+        RC.EV.afterSplit(S, t.phase, report);
+      }
     } else if (S.turn % 4 === 3) P.checkSponsors(S);
     // Economía
     const bud = P.budget(S);
@@ -800,6 +818,10 @@
     pl.energy = Math.min(100, pl.energy + 25 + P.staffEff(S, 'nutri') + P.staffEff(S, 'fisico'));
     pl.morale = U.clamp(pl.morale + (60 - pl.morale) * 0.05, 0, 100);
     pl.actionsUsed = 0;
+    pl.turnMod = pl.nextTurnMod || 0;
+    pl.nextTurnMod = 0;
+    delete pl.clutch;
+    S.clock = (S.clock || 0) + 1;
     // Evento
     const ev = randomEvent(S);
     if (ev) { report.events.push(ev); news(S, ev); }
@@ -828,6 +850,7 @@
       if (!S.over) report.events.push(...RC.Season.prepareTurn(S));
     }
     pl.peakOvr = Math.max(pl.peakOvr, P.ovr(S));
+    if (!S.over) RC.EV.tick(S, report);
     report.events.push(...P.checkAchievements(S));
     S.lastReport = report;
     return report;
@@ -851,7 +874,7 @@
     if (t.phase === 'off' && t.round === 0 && pl.contract && pl.contract.endYear <= S.year) {
       const team = P.team(S);
       const req = C.LEAGUES[team.league].req;
-      if (P.ovr(S) >= req - 3) {
+      if (P.ovr(S) >= req - 3 && (pl.clubRel == null || pl.clubRel >= 20)) {
         P.makeOffer(S, team.id, { renewal: true, ttl: 4, years: U.randInt(1, 2) });
         news(S, `${team.name} te ofrece renovar.`, 'good');
       } else news(S, `${team.name} no cuenta contigo para la próxima temporada.`, 'bad');
@@ -960,7 +983,7 @@
       id: S.id, name: pl.name, role: pl.role, nation: pl.nation, years: `${S.startYear}–${S.year}`, age: pl.age,
       peak: Math.round(pl.peakOvr), titles: pl.titles.length, worlds: pl.titles.filter((t) => t.name.startsWith('Worlds')).length,
       awards: pl.awards.length, games: c.g, winrate: c.g ? Math.round((c.w / c.g) * 100) : 0, earned: Math.round(pl.earned), fans: pl.fans,
-      reason: S.overReason,
+      reason: S.overReason, teams: (pl.teamsPlayed || []).slice(-6),
     };
     try {
       const list = JSON.parse(localStorage.getItem('rc_hof') || '[]').filter((e) => e.id !== entry.id);

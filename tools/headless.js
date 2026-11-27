@@ -5,7 +5,7 @@ const ctx = { console, Math, Date, JSON, Promise, setTimeout, localStorage: { ge
 ctx.window = ctx;
 ctx.fetch = async (u) => ({ json: async () => JSON.parse(fs.readFileSync(path.join(root, u), 'utf8')) });
 vm.createContext(ctx);
-for (const f of ['util', 'constants', 'data', 'world', 'sim', 'season', 'career']) vm.runInContext(fs.readFileSync(path.join(root, 'js', f + '.js'), 'utf8'), ctx, { filename: f });
+for (const f of ['util', 'constants', 'data', 'world', 'sim', 'season', 'career', 'events']) vm.runInContext(fs.readFileSync(path.join(root, 'js', f + '.js'), 'utf8'), ctx, { filename: f });
 const RC = ctx.RC;
 (async () => {
   await RC.D.load();
@@ -18,7 +18,7 @@ const RC = ctx.RC;
   let lastYear = S.year;
   const log = () => console.log(S.year, 'edad', S.pl.age, 'OVR', P.ovr(S).toFixed(1), 'rango', P.rankInfo(S.pl.lp).name, 'equipo', P.team(S)?.name || '-', P.team(S) ? RC.C.LEAGUES[P.team(S).league].name : '', 'dinero', Math.round(S.pl.money), 'fans', S.pl.fans, 'títulos', S.pl.titles.length);
   log();
-  let guard = 0;
+  let guard = 0, keys = 0;
   while (!S.over && S.year < lastYear + years && guard++ < 5000) {
     // compras y staff
     if (strat === 'good') {
@@ -57,6 +57,10 @@ const RC = ctx.RC;
       const tops = Object.values(S.world.teams).filter(t => RC.C.LEAGUES[t.league].tier < (P.team(S) ? RC.C.LEAGUES[P.team(S).league].tier : 9)).sort((a,b)=>RC.C.LEAGUES[a.league].tier-RC.C.LEAGUES[b.league].tier);
       for (const t of tops.slice(0, 2)) P.offerSelf(S, t.id);
     }
+    for (const m of RC.EV.pending(S)) RC.EV.resolve(S, m.id, Math.floor(Math.random() * m.options.length), Math.random());
+    if (!S.amateur && RC.EV.keyMoment(S).key) { S.pl.clutch = { score: Math.random(), reason: 'test' }; keys++; }
+    if (S.pl.teamId && Math.random() < 0.05) { const tops = Object.values(S.world.players).filter(p => p.team && p.team !== S.pl.teamId); const pid = tops[Math.floor(Math.random() * tops.length)].id; RC.EV.contact(S, pid, ['pitch', 'ask', 'friend'][Math.floor(Math.random() * 3)]); }
+    if (S.pl.teamId && RC.EV.canRequest(S).ok && Math.random() < 0.05) { const c = RC.EV.candidates(S, RC.C.ROLES.find(r => r !== S.pl.role)); if (c.length) RC.EV.request(S, c[0].pid); }
     const rep = P.advance(S);
     if (S.year !== lastYear) { log(); lastYear = S.year; }
   }
@@ -65,5 +69,6 @@ const RC = ctx.RC;
   console.log('premios', S.pl.awards.map(t => t.name).join(' | '));
   console.log('carrera', JSON.stringify(S.pl.stats.career), 'over', S.over, S.overReason || '');
   console.log('attrs', JSON.stringify(S.pl.attrs));
+  console.log('momentos clave', keys, 'mensajes', (S.inbox||[]).length, 'estatus', JSON.stringify(RC.EV.status(S)), 'rel', S.pl.clubRel);
   console.log('tamaño guardado KB', Math.round(JSON.stringify(S).length / 1024));
 })().catch(e => { console.error(e); process.exit(1); });

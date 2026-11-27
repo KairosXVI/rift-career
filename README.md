@@ -25,6 +25,13 @@ Pretemporada → Winter Split → Spring Split → MSI (y EMEA Masters para las 
 ### Extras
 Marcador completo de los 10 jugadores en cada partida, ranking mundial de jugadores y equipos, logros, patrocinadores por niveles (local, nacional, internacional y global), staff con tres niveles y experiencias de pago como bootcamps.
 
+### Decisiones y minijuegos
+- De vez en cuando llegan decisiones a **Mensajes** (exámenes, fiestas, entrevistas, peleas en el vestuario, propuestas turbias…). Siempre eliges entre 3 opciones y cada una tiene consecuencias reales.
+- En los **momentos clave** (tu debut con un equipo, finales, partidos a vida o muerte) juegas un minijuego de habilidad: último golpe, puntería, esquivar skillshots, reflejos de Flash, proteger al aliado u ojo al minimapa. Tu puntuación decide el mapa decisivo de la serie (del 25 % al 85 % de opciones de ganarlo).
+
+### Tu papel en el equipo
+Según tu media frente a la de tus compañeros y el tiempo en el club eres promesa, titular, estrella, capitán o jugador franquicia. Cuanto más importante, más caso te hace el club: una petición de fichaje por temporada y, si eres franquicia y el equipo va mal, te consultan a quién fichar. Desde la pestaña Mundo puedes hablar con cualquier jugador para proponerle venir, preguntar si su club te quiere o hacer amistad.
+
 ### Mercado
 Las ofertas llegan en pretemporada, durante el MSI y después de los Worlds. Puedes negociar el sueldo con 3 intentos dentro de un rango, o ofrecerte tú a cualquier equipo de las 17 ligas si cumples su nivel mínimo. Los extranjeros necesitan más nivel en Corea y China.
 

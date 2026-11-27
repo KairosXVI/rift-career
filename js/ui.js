@@ -35,6 +35,15 @@
   const champImg = (id, s = 40) => `<img class="champ" style="--s:${s}px" src="${D.champImg(id)}" alt="${esc(D.champName(id))}" title="${esc(D.champName(id))}">`;
   const bar = (v, max = 100, cls = '') => `<div class="bar ${cls}"><i style="width:${U.clamp((v / max) * 100, 0, 100)}%"></i></div>`;
   const tierBadge = (champ) => { const t = P.tierOf(P.meta(G.S, champ)); return `<span class="tier tier-${t}" title="Tier ${t} en el parche">${t}</span>`; };
+  // Logo de un equipo a partir de su nombre (sirve para el historial y el Salón de la fama)
+  const logoByName = (name, s = 20) => {
+    const t = D.teams[name];
+    if (!t) return '';
+    const src = t.logo && D.logo(t.logo);
+    return src ? `<img class="logo" style="--s:${s}px" src="${src}" alt="">` : `<div class="logo-txt" style="--s:${s}px;background:${U.hashColor(name)}">${esc(t.short.slice(0, 3))}</div>`;
+  };
+  const NAMES_BY_LEN = () => (NAMES_BY_LEN.c = NAMES_BY_LEN.c || Object.keys(D.teams).sort((a, b) => b.length - a.length));
+  const logosInText = (text) => { const found = []; let rest = text; for (const n of NAMES_BY_LEN()) { if (rest.includes(n)) { found.push(n); rest = rest.split(n).join(''); } } return found.map((n) => logoByName(n, 22)).join(''); };
   const leagueName = (lg) => (C.LEAGUES[lg] ? C.LEAGUES[lg].name : lg);
   const teamName = (tid) => (G.S.world.teams[tid] ? G.S.world.teams[tid].name : '?');
   const flag = (id) => (C.NATIONS.find((n) => n.id === id) || {}).flag || '';
@@ -98,7 +107,7 @@
   }
 
   function hofTable(list) {
-    const rows = list.slice().sort((a, b) => b.titles - a.titles || b.peak - a.peak).map((e) => `<tr><td>${flag(e.nation)} <b class="gold">${esc(e.name)}</b> <span class="muted small">${C.ROLE_ES[e.role]}</span></td><td>${esc(e.years)}</td><td class="r num">${e.peak}</td><td class="r num">${e.titles}</td><td class="r num">${e.worlds}</td><td class="r num">${e.games}</td><td class="r num">${e.winrate}%</td></tr>`).join('');
+    const rows = list.slice().sort((a, b) => b.titles - a.titles || b.peak - a.peak).map((e) => `<tr><td>${flag(e.nation)} <b class="gold">${esc(e.name)}</b> <span class="muted small">${C.ROLE_ES[e.role]}</span><div class="row" style="gap:4px;margin-top:3px">${(e.teams || []).map((n) => logoByName(n, 20)).join('')}</div></td><td>${esc(e.years)}</td><td class="r num">${e.peak}</td><td class="r num">${e.titles}</td><td class="r num">${e.worlds}</td><td class="r num">${e.games}</td><td class="r num">${e.winrate}%</td></tr>`).join('');
     return `<div class="tbl-wrap"><table><thead><tr><th>Jugador</th><th>Años</th><th class="r">Pico</th><th class="r">Títulos</th><th class="r">Worlds</th><th class="r">Partidas</th><th class="r">% vict.</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
 
@@ -152,7 +161,7 @@
 
   // ---------- Juego ----------
   const TABS = [
-    ['inicio', 'Inicio'], ['jugador', 'Jugador'], ['campeones', 'Campeones'], ['tienda', 'Tienda'], ['staff', 'Staff'],
+    ['inicio', 'Inicio'], ['mensajes', 'Mensajes'], ['jugador', 'Jugador'], ['campeones', 'Campeones'], ['tienda', 'Tienda'], ['staff', 'Staff'],
     ['equipo', 'Equipo'], ['competicion', 'Competición'], ['mundo', 'Mundo'], ['mercado', 'Mercado'], ['patrocinios', 'Patrocinios'], ['carrera', 'Carrera'], ['partida', 'Partida'],
   ];
 
@@ -161,11 +170,11 @@
     const pl = S.pl;
     const date = Season.turnDate(S);
     const team = P.team(S);
-    const alerts = { mercado: S.offers.length > 0, patrocinios: S.sponsorOffers.length > 0 };
+    const alerts = { mercado: S.offers.length > 0, patrocinios: S.sponsorOffers.length > 0, mensajes: RC.EV.unread(S) > 0 };
     let tabs = TABS;
     if (S.amateur) tabs = TABS.filter(([id]) => !['equipo', 'competicion', 'mundo'].includes(id));
     if (!tabs.some(([id]) => id === G.tab)) G.tab = 'inicio';
-    const body = { inicio: tabInicio, jugador: tabJugador, campeones: tabCampeones, tienda: tabTienda, staff: tabStaff, equipo: tabEquipo, competicion: tabCompeticion, mundo: tabMundo, mercado: tabMercado, patrocinios: tabPatrocinios, carrera: tabCarrera, partida: tabPartida }[G.tab]();
+    const body = { inicio: tabInicio, jugador: tabJugador, campeones: tabCampeones, tienda: tabTienda, staff: tabStaff, equipo: tabEquipo, competicion: tabCompeticion, mundo: tabMundo, mensajes: tabMensajes, mercado: tabMercado, patrocinios: tabPatrocinios, carrera: tabCarrera, partida: tabPartida }[G.tab]();
     return `<header class="topbar"><div class="wrap">
       <div class="topbar-in">
         <div class="brand">RIFT <span>CAREER</span></div>
@@ -215,6 +224,7 @@
         </div>
       </div>
       <div class="stack">
+        ${RC.EV.pending(S).length ? `<div class="alert red">Tienes ${RC.EV.pending(S).length} decisión${RC.EV.pending(S).length > 1 ? 'es' : ''} pendiente${RC.EV.pending(S).length > 1 ? 's' : ''}. Si no respondes, se elige por ti. <button class="btn sm" data-act="tab" data-v="mensajes">Responder</button></div>` : ''}
         ${offersAlert}${sponsorAlert}${promo}
         <div class="panel"><div class="panel-h"><h2>Estado</h2></div>
           <div class="attr"><span>Energía</span>${bar(pl.energy, 100, 'blue')}<span class="v">${Math.round(pl.energy)}</span></div>
@@ -434,11 +444,27 @@
     const team = P.team(S);
     if (!team) return `<div class="panel"><h2>Sin equipo</h2><p>Eres agente libre desde hace ${S.pl.freeTurns} semanas. Si pasas un año entero sin equipo, tu carrera termina.</p><button class="btn primary" data-act="tab" data-v="mercado">Ir al mercado</button></div>`;
     const c = S.pl.contract;
+    const left = c.endYear - S.year + 1;
+    const st = RC.EV.status(S);
+    const relV = S.pl.clubRel == null ? 55 : S.pl.clubRel;
+    const req = RC.EV.canRequest(S);
+    const inter = (S.pl.interested || []).map((x) => S.world.players[x.pid]).filter(Boolean);
+    const b = P.budget(S);
     return `<div class="grid g2">
       <div class="panel"><div class="row" style="gap:16px">${teamLogo(team, 80)}<div><h1 style="font-size:24px">${esc(team.name)}</h1><div class="small muted">${esc(C.LEAGUES[team.league].full)} · media <span class="num">${W.teamAvgOvr(S, team).toFixed(1)}</span></div></div></div>
-        <div class="kv" style="margin-top:16px"><div><small>Sueldo / año</small><b>${U.money(c.salary)}</b></div><div><small>Contrato hasta</small><b>${c.endYear}</b></div><div><small>Sueldo / semana</small><b>${U.money(c.salary / 52)}</b></div></div>
-        <div class="kv" style="margin-top:10px"><div><small>Patrocinios / semana</small><b>${U.money(U.sum(S.pl.sponsors.map((x) => x.pay)))}</b></div><div><small>Ingresos totales / semana</small><b class="good">${U.money(P.budget(S).income)}</b></div><div><small>Balance / semana</small><b>${U.money(P.budget(S).net)}</b></div></div></div>
+        <div class="contract"><div class="ct-big"><b class="num">${left}</b><span>${left === 1 ? 'temporada<br>de contrato' : 'temporadas<br>de contrato'}</span></div>
+          <div class="kv" style="flex:1"><div><small>Termina</small><b>Fin de ${c.endYear}</b></div><div><small>Sueldo / año</small><b>${U.money(c.salary)}</b></div><div><small>Cláusula</small><b>${U.money(c.buyout || c.salary * 2)}</b></div></div></div>
+        <div class="kv" style="margin-top:10px"><div><small>Sueldo / semana</small><b>${U.money(c.salary / 52)}</b></div><div><small>Patrocinios / semana</small><b>${U.money(U.sum(S.pl.sponsors.map((x) => x.pay)))}</b></div><div><small>Ingresos totales</small><b class="good">${U.money(b.income)}</b></div></div>
+        ${left <= 1 ? '<p class="small gold" style="margin:10px 0 0">Último año de contrato: tras los Worlds el club decidirá si te renueva.</p>' : ''}</div>
+      <div class="panel"><div class="panel-h"><h2>Tu papel</h2>${st ? `<span class="badge gold">${st.name}</span>` : ''}</div>
+        <div class="status-steps">${['promesa', 'titular', 'estrella', 'capitan', 'franquicia'].map((id) => `<span class="${st && st.id === id ? 'on' : ''}">${RC.EV.STATUS[id].name}</span>`).join('')}</div>
+        <p class="small" style="margin:10px 0">${st ? esc(st.desc) : ''}</p>
+        <div class="attr"><span>Relación con el club</span>${bar(relV, 100, relV < 30 ? 'red' : 'green')}<span class="v">${Math.round(relV)}</span></div>
+        <div class="attr"><span>Diferencia con el equipo</span><span class="small">Tu media frente a la de tus compañeros</span><span class="v ${st && st.diff >= 0 ? 'good' : 'bad'}">${st ? (st.diff >= 0 ? '+' : '') + st.diff.toFixed(1) : ''}</span></div>
+        <div class="row between" style="margin-top:12px"><span class="small muted">${req.ok ? `Te queda 1 petición de fichaje en ${S.year}.` : esc(req.why)}</span><button class="btn ${req.ok ? 'primary' : ''} sm" data-act="reqOpen" ${req.ok ? '' : 'disabled'}>Pedir un fichaje</button></div></div>
       <div class="panel"><div class="panel-h"><h2>Plantilla</h2></div>${rosterMini(S, team)}</div>
+      <div class="panel"><div class="panel-h"><h2>Interesados en venir</h2><span class="small muted">Jugadores que aceptaron tu propuesta</span></div>
+        ${inter.length ? inter.map((p) => `<div class="attr" style="grid-template-columns:1fr auto auto"><span><b style="color:var(--bright)">${esc(p.name)}</b> <span class="small muted">${C.ROLE_ES[p.role]}${p.team ? ' · ' + esc(S.world.teams[p.team].short) : ''}</span></span><span class="ovr sm">${W.ovr(p).toFixed(0)}</span><span class="badge win">Ya dijo que sí</span></div>`).join('') : '<p class="small muted">Habla con jugadores desde la pestaña Mundo. Si aceptan, saldrán como opción cuando pidas un fichaje o el club te consulte.</p>'}</div>
     </div>`;
   }
 
@@ -586,6 +612,26 @@
     return `<div class="bk bk3">${rounds.map((ms, i) => `<div class="bk-col">${Array.from({ length: Math.max(ms.length, n[i] || 1) }, (_, j) => mcard(S, ms[j], names[i])).join('')}</div>`).join('')}</div>`;
   }
 
+  // ----- Mensajes -----
+  const FROM_ICON = { family: 'Familia', press: 'Prensa', brand: 'Marca', club: 'Club', player: 'Jugador', system: 'Aviso' };
+  function tabMensajes() {
+    const S = G.S;
+    const box = RC.EV.inbox(S);
+    if (!box.length) return '<div class="panel"><h2>Mensajes</h2><p class="muted">Aquí te escribirán jugadores, clubes, tu familia y la prensa. Algunos mensajes son decisiones: eliges entre 3 opciones.</p></div>';
+    const sel = box.find((m) => m.id === G.msgSel) || RC.EV.pending(S)[0] || box[0];
+    sel.read = true;
+    const fromLogo = (m) => (m.from && m.from.teamId && S.world && S.world.teams[m.from.teamId] ? teamLogo(S.world.teams[m.from.teamId], 30) : `<span class="av">${esc((m.from && m.from.name || '?').slice(0, 1))}</span>`);
+    const list = box.map((m) => `<button class="msg ${m.id === sel.id ? 'on' : ''} ${m.options && !m.resolved ? 'pend' : ''} ${!m.read ? 'unread' : ''}" data-act="msgSel" data-v="${m.id}">${fromLogo(m)}<span class="msg-b"><b>${esc(m.title)}</b><small>${esc(m.from ? m.from.name : '')} · ${esc(m.when)}</small></span>${m.options && !m.resolved ? '<span class="badge loss">Decidir</span>' : ''}</button>`).join('');
+    const hintCls = (h) => (/Arriesg|Muy/.test(h) ? 'loss' : /Seguro/.test(h) ? 'win' : /Minijuego/.test(h) ? 'gold' : 'blue');
+    const detail = `<div class="msg-head">${fromLogo(sel)}<div><h3>${esc(sel.title)}</h3><span class="small muted">${esc(sel.from ? sel.from.name : '')} · ${FROM_ICON[sel.from && sel.from.kind] || ''} · ${esc(sel.when)}</span></div></div>
+      <p class="msg-text">${esc(sel.text)}</p>
+      ${sel.options ? (sel.resolved
+        ? `<div class="alert ${sel.auto ? 'red' : ''}"><b>${sel.auto ? 'Se eligió por ti' : 'Elegiste'}:</b> ${esc(sel.options[sel.choice].label)}<br>${esc(sel.answer || '')}</div>`
+        : `<div class="stack" style="gap:8px">${sel.options.map((o, i) => `<button class="opt-btn" data-act="decide" data-v="${sel.id}" data-i="${i}"><span>${esc(o.label)}</span><span class="badge ${hintCls(o.hint || '')}">${esc(o.hint || '')}</span></button>`).join('')}</div>
+           ${sel.expires != null ? `<p class="small muted" style="margin:8px 0 0">Si no respondes en ${Math.max(1, sel.expires - (S.clock || 0))} ${S.amateur ? 'mes(es)' : 'semana(s)'}, se elegirá "${esc(sel.options[sel.def != null ? sel.def : sel.options.length - 1].label)}".</p>` : ''}`) : ''}`;
+    return `<div class="msgs"><div class="panel msg-list">${list}</div><div class="panel msg-detail">${detail}</div></div>`;
+  }
+
   // ----- Mundo: rankings -----
   function tabMundo() {
     const S = G.S;
@@ -596,11 +642,11 @@
     const myPos = list.findIndex((p) => p.user) + 1;
     const top = list.slice(0, 25);
     const teams = Object.values(S.world.teams).map((t) => ({ t, o: W.teamAvgOvr(S, t) })).sort((a, b) => b.o - a.o).slice(0, 20);
-    const row = (p, i) => { const t = S.world.teams[p.team]; return `<tr class="${p.user ? 'me' : ''}"><td class="num">${i + 1}</td><td><b style="color:var(--bright)">${esc(p.name)}</b></td><td class="small">${C.ROLE_ES[p.role]}</td><td>${t ? `<div class="team-cell">${teamLogo(t, 22)}<span class="small">${esc(t.short)} · ${esc(C.LEAGUES[t.league].name)}</span></div>` : '<span class="muted">Libre</span>'}</td><td class="r num">${p.age}</td><td class="r"><span class="ovr sm">${p.ovr.toFixed(0)}</span></td></tr>`; };
+    const row = (p, i) => { const t = S.world.teams[p.team]; return `<tr class="${p.user ? 'me' : ''}"><td class="num">${i + 1}</td><td><b style="color:var(--bright)">${esc(p.name)}</b></td><td class="small">${C.ROLE_ES[p.role]}</td><td>${t ? `<div class="team-cell">${teamLogo(t, 22)}<span class="small">${esc(t.short)} · ${esc(C.LEAGUES[t.league].name)}</span></div>` : '<span class="muted">Libre</span>'}</td><td class="r num">${p.age}</td><td class="r"><span class="ovr sm">${p.ovr.toFixed(0)}</span></td><td class="r">${p.user || p.team === S.pl.teamId ? '' : `<button class="btn sm" data-act="talk" data-v="${p.id}">Hablar</button>`}</td></tr>`; };
     return `<div class="grid g2" style="align-items:start">
       <div class="panel"><div class="panel-h"><h2>Mejores jugadores</h2><div class="seg sm">${[['all', 'Todos']].concat(C.ROLES.map((r) => [r, C.ROLE_ES[r]])).map(([id, n]) => `<button class="seg-b ${role === id ? 'on' : ''}" data-act="mundoRole" data-v="${id}">${n}</button>`).join('')}</div></div>
         <p class="small" style="margin:0 0 10px">Tu posición: <b class="gold num">${myPos}º</b> de ${list.length}${role === 'all' ? '' : ' en tu rol'}.</p>
-        <div class="tbl-wrap"><table><thead><tr><th>#</th><th>Jugador</th><th>Rol</th><th>Equipo</th><th class="r">Edad</th><th class="r">Media</th></tr></thead><tbody>${top.map(row).join('')}${myPos > 25 ? `<tr><td colspan="6" class="c muted">…</td></tr>${row(me, myPos - 1)}` : ''}</tbody></table></div></div>
+        <div class="tbl-wrap"><table><thead><tr><th>#</th><th>Jugador</th><th>Rol</th><th>Equipo</th><th class="r">Edad</th><th class="r">Media</th><th></th></tr></thead><tbody>${top.map(row).join('')}${myPos > 25 ? `<tr><td colspan="7" class="c muted">…</td></tr>${row(me, myPos - 1)}` : ''}</tbody></table></div></div>
       <div class="panel"><div class="panel-h"><h2>Power ranking</h2><span class="small muted">Media de la plantilla</span></div>
         <div class="tbl-wrap"><table><tbody>${teams.map((x, i) => `<tr class="${x.t.id === S.pl.teamId ? 'me' : ''}"><td class="num">${i + 1}</td><td><div class="team-cell">${teamLogo(x.t, 26)}<span class="nm">${esc(x.t.name)}</span></div></td><td class="small muted">${esc(C.LEAGUES[x.t.league].name)}</td><td class="r num">${x.o.toFixed(1)}</td></tr>`).join('')}</tbody></table></div></div>
     </div>`;
@@ -613,6 +659,8 @@
     let html = `<div class="panel"><div class="panel-h"><h2>Ofertas recibidas</h2>${S.amateur ? '' : `<span class="badge ${Season.isWindowOpen(S) ? 'win' : 'loss'}">${Season.isWindowOpen(S) ? 'Mercado abierto' : 'Mercado cerrado'}</span>`}</div>
       ${offers ? `<div class="grid g2">${offers}</div>` : `<p class="muted">${S.amateur ? scoutHint(S) : 'No tienes ofertas ahora mismo. El mercado abre en pretemporada, durante el MSI y tras los Worlds. Si juegas bien, los equipos vendrán a por ti.'}</p>`}</div>`;
     if (S.amateur) return html;
+    const rum = S.rumors || [];
+    html += `<div class="panel" style="margin-top:16px"><div class="panel-h"><h2>Rumores</h2></div>${rum.length ? `<div class="feed">${rum.slice(0, 10).map((r) => `<div class="${r.you ? 'good' : ''}"><small>${esc(r.when)}</small>${esc(r.text)}</div>`).join('')}</div>` : '<p class="small muted">Sin rumores por ahora.</p>'}</div>`;
     const lg = G.marketLeague || (P.team(S) ? P.team(S).league : P.nation(S).home);
     const req = P.leagueReq(S, lg);
     const me = P.ovr(S);
@@ -635,7 +683,7 @@
     const val = G.negAmount[o.id] || Math.round((o.salary * 1.15) / 500) * 500;
     return `<div class="panel" style="background:var(--panel2)">
       <div class="team-cell">${teamLogo(t, 48)}<div style="min-width:0"><div class="nm">${esc(t.name)}</div><div class="small muted">${esc(C.LEAGUES[t.league].full)} · media ${W.teamAvgOvr(S, t).toFixed(1)}</div></div></div>
-      <div class="row" style="margin:8px 0">${o.renewal ? '<span class="badge blue">Renovación</span>' : ''}${o.academy ? '<span class="badge gold">Academia</span>' : ''}<span class="badge">${o.years} año${o.years > 1 ? 's' : ''}</span><span class="badge">Caduca en ${Math.max(1, o.expires - S.turn)} ${S.amateur ? 'mes(es)' : 'semana(s)'}</span></div>
+      <div class="row" style="margin:8px 0">${o.renewal ? '<span class="badge blue">Renovación</span>' : ''}${o.academy ? '<span class="badge gold">Academia</span>' : ''}<span class="badge">${o.years} año${o.years > 1 ? 's' : ''}</span><span class="badge">Caduca en ${Math.max(1, o.expires - S.turn)} ${S.amateur ? 'mes(es)' : 'semana(s)'}</span>${o.buyout ? `<span class="badge gold">Pagan tu cláusula: ${U.money(o.buyout)}</span>` : ''}</div>
       <div class="kv"><div><small>Oferta / año</small><b>${U.money(o.salary)}</b></div><div><small>Intentos</small><b>${o.attempts}/3</b></div></div>
       <label class="f" style="margin-top:12px">Pedir sueldo (rango ${U.money(o.salary)} – ${U.money(hi)})
         <input type="range" id="neg-${o.id}" min="${o.salary}" max="${hi}" step="500" value="${val}" data-neg="${o.id}">
@@ -692,8 +740,8 @@
       </div>
       <div class="panel"><div class="panel-h"><h2>Logros</h2><span class="small muted">${Object.keys(pl.ach || {}).length}/${C.ACHIEVEMENTS.length}</span></div>
         <div class="ach-grid">${C.ACHIEVEMENTS.map((a) => { const y = (pl.ach || {})[a.id]; return `<div class="ach ${y ? 'on' : ''}" title="${esc(a.desc)}">${ICON.star}<span><b>${esc(a.name)}</b><small>${y ? 'Conseguido en ' + y : esc(a.desc)}</small></span></div>`; }).join('')}</div></div>
-      <div class="panel"><div class="panel-h"><h2>Por temporada</h2></div>${seasons.length ? `<div class="tbl-wrap"><table><thead><tr><th>Competición</th><th>Equipo</th><th class="r">Part.</th><th class="r">V-D</th><th class="r">KDA</th><th class="r">CS/min</th><th class="r">Nota</th><th class="r">MVP</th><th class="r">Puesto</th></tr></thead><tbody>${seasons.map(([k, s]) => `<tr><td>${esc(k)}</td><td>${esc(s.team)}</td><td class="r num">${s.g}</td><td class="r num">${s.w}-${s.g - s.w}</td><td class="r num">${s.d ? ((s.k + s.a) / s.d).toFixed(1) : '—'}</td><td class="r num">${s.g ? (s.cs / s.g).toFixed(1) : '—'}</td><td class="r num">${s.g ? (s.r / s.g).toFixed(1) : '—'}</td><td class="r num">${s.mvp}</td><td class="r num">${s.place ? s.place + 'º' : ''}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Aún no has jugado como profesional.</p>'}</div>
-      <div class="panel"><div class="panel-h"><h2>Historia</h2></div><div class="timeline">${pl.history.slice().reverse().map((h) => `<div><b>${h.year}</b>${esc(h.text)}</div>`).join('') || '<p class="muted">Tu historia empieza ahora.</p>'}</div></div>
+      <div class="panel"><div class="panel-h"><h2>Por temporada</h2></div>${seasons.length ? `<div class="tbl-wrap"><table><thead><tr><th>Competición</th><th>Equipo</th><th class="r">Part.</th><th class="r">V-D</th><th class="r">KDA</th><th class="r">CS/min</th><th class="r">Nota</th><th class="r">MVP</th><th class="r">Puesto</th></tr></thead><tbody>${seasons.map(([k, s]) => `<tr><td>${esc(k)}</td><td><div class="team-cell">${logoByName(s.team, 22)}<span>${esc(s.team)}</span></div></td><td class="r num">${s.g}</td><td class="r num">${s.w}-${s.g - s.w}</td><td class="r num">${s.d ? ((s.k + s.a) / s.d).toFixed(1) : '—'}</td><td class="r num">${s.g ? (s.cs / s.g).toFixed(1) : '—'}</td><td class="r num">${s.g ? (s.r / s.g).toFixed(1) : '—'}</td><td class="r num">${s.mvp}</td><td class="r num">${s.place ? s.place + 'º' : ''}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Aún no has jugado como profesional.</p>'}</div>
+      <div class="panel"><div class="panel-h"><h2>Historia</h2></div><div class="timeline">${pl.history.slice().reverse().map((h) => `<div class="tl"><b>${h.year}</b><span class="tl-logos">${logosInText(h.text)}</span><span>${esc(h.text)}</span></div>`).join('') || '<p class="muted">Tu historia empieza ahora.</p>'}</div></div>
     </div>`;
   }
 
@@ -731,7 +779,7 @@
         <div><small>Años</small><b>${S.startYear}–${S.year}</b></div><div><small>Títulos</small><b>${pl.titles.length}</b></div><div><small>Worlds</small><b>${pl.titles.filter((t) => t.name.startsWith('Worlds')).length}</b></div>
         <div><small>Media máxima</small><b>${pl.peakOvr.toFixed(1)}</b></div><div><small>Partidas</small><b>${c.g}</b></div><div><small>% victorias</small><b>${c.g ? Math.round((c.w / c.g) * 100) : 0}%</b></div>
         <div><small>Premios</small><b>${pl.awards.length}</b></div><div><small>Seguidores</small><b>${U.num(pl.fans)}</b></div></div>
-        <div class="timeline" style="margin-top:16px">${pl.history.map((h) => `<div><b>${h.year}</b>${esc(h.text)}</div>`).join('')}</div>
+        <div class="timeline" style="margin-top:16px">${pl.history.map((h) => `<div class="tl"><b>${h.year}</b><span class="tl-logos">${logosInText(h.text)}</span><span>${esc(h.text)}</span></div>`).join('')}</div>
         <div class="row" style="margin-top:16px;justify-content:center"><button class="btn primary lg" data-act="newConfirm">Nueva carrera</button></div></div>
       ${hof.length ? `<section class="panel" style="max-width:900px;margin:24px auto 0"><h2>Salón de la fama</h2>${hofTable(hof)}</section>` : ''}</div>`;
   }
@@ -759,6 +807,7 @@
         const g = u.games[gi];
         h += `<div class="match ${won ? 'won' : 'lost'}"><div class="side">${teamLogo(A, 60)}<span class="nm">${esc(A.name)}</span></div><div class="side"><span class="score">${u.sa} - ${u.sb}</span><span class="badge ${won ? 'win' : 'loss'}">${won ? 'Victoria' : 'Derrota'}</span></div><div class="side">${teamLogo(B, 60)}<span class="nm">${esc(B.name)}</span></div></div>
           <div class="row" style="margin:12px 0 6px">${u.mvp ? '<span class="badge gold">MVP de la serie</span>' : ''}${u.games.some((x) => x.penta) ? '<span class="badge gold">¡Pentakill!</span>' : ''}<span class="small">+${U.num(u.fans || 0)} seguidores</span></div>
+          ${u.clutch ? `<div class="alert ${u.clutch.won ? '' : 'red'}" style="margin-bottom:8px"><b>Jugada clave (${esc(u.clutch.reason)}):</b> ${Math.round(u.clutch.score * 100)} % en el minijuego. ${u.clutch.won ? 'Ganáis ese mapa.' : 'No basta para ganar ese mapa.'}</div>` : ''}
           ${u.games.length > 1 ? `<div class="seg sm">${u.games.map((x, i) => `<button class="seg-b ${i === gi ? 'on' : ''}" data-act="repGame" data-v="${i}">Partida ${i + 1} <span class="${x.win ? 'good' : 'bad'}">${x.win ? 'V' : 'D'}</span></button>`).join('')}</div>` : ''}
           <div class="game-line">${champImg(g.champ, 44)}<div><b style="color:var(--bright)">${esc(D.champName(g.champ))}</b>${g.penta ? ' <span class="badge gold">Pentakill</span>' : ''}<div class="small muted">contra ${esc(g.opp)}${g.oppChamp ? ' (' + esc(D.champName(g.oppChamp)) + ')' : ''}</div></div><span class="num">${g.k}/${g.d}/${g.a}</span><span class="num hide-s">${g.cs} CS/m</span><span class="ovr sm">${g.rating.toFixed(1)}</span></div>
           ${scoreboard(S, g, A, B)}`;
@@ -820,19 +869,40 @@
     staffSet: (d) => after(P.setStaff(G.S, d.v, +d.t)),
     exp: (d) => after(P.buyExperience(G.S, d.v)),
     advance: () => {
-      const wasAmateur = G.S.amateur;
-      const rep = P.advance(G.S);
-      RC.save();
-      if (!G.S.over) G.modal = reportModal(rep);
-      if (wasAmateur && !G.S.amateur) G.tab = 'equipo';
-      RC.render();
+      const S = G.S;
+      const km = RC.EV.keyMoment(S);
+      if (km.key && !S.pl.clutch) {
+        RC.playMinigame({ title: 'Momento clave', reason: km.reason, sub: 'Tu jugada decidirá el mapa decisivo de la serie.', onDone: (score) => { S.pl.clutch = { score, reason: km.reason }; doAdvance(); } });
+        return;
+      }
+      doAdvance();
     },
+    msgSel: (d) => { G.msgSel = d.v; RC.render(); },
+    decide: (d) => {
+      const S = G.S;
+      const m = RC.EV.inbox(S).find((x) => x.id === d.v);
+      if (!m) return;
+      const o = m.options[+d.i];
+      if (o.mg) {
+        RC.playMinigame({ title: m.title, reason: o.label, onDone: (score) => { const r = RC.EV.resolve(S, m.id, +d.i, score); G.modal = null; after(r); } });
+        return;
+      }
+      after(RC.EV.resolve(S, m.id, +d.i));
+    },
+    talk: (d) => { G.modal = talkModal(d.v); RC.render(); },
+    talkDo: (d) => { G.modal = null; after(RC.EV.contact(G.S, d.v, d.k)); },
+    reqOpen: () => { G.reqCands = {}; G.reqRole = C.ROLES.find((r) => r !== G.S.pl.role); G.modal = reqModal; RC.render(); },
+    reqRole: (d) => { G.reqRole = d.v; RC.render(); },
+    reqDo: (d) => { G.modal = null; after(RC.EV.request(G.S, d.v)); },
+    mgStart: () => startMinigame(),
+    mgSim: () => { const sc = RC.MG.simScore(G.S); finishMinigame(sc, true); },
+    mgDone: () => { const cb = G.mg && G.mg.onDone; const sc = G.mg ? G.mg.score : 0.5; G.mg = null; G.modal = null; if (cb) cb(sc); },
     closeModal: () => { G.modal = null; RC.render(); },
     compView: (d) => { G.compView = d.v; RC.render(); },
     ligaRound: (d) => { G.ligaRound = +d.v; RC.render(); },
     repGame: (d) => { G.repGame = +d.v; RC.render(); },
     mundoRole: (d) => { G.mundoRole = d.v; RC.render(); },
-    closeModalBg: (d, el, ev) => { if (ev.target === el) { G.modal = null; RC.render(); } },
+    closeModalBg: (d, el, ev) => { if (ev.target === el && !G.mg) { G.modal = null; RC.render(); } },
     accept: (d) => { const wasAm = G.S.amateur; const r = P.acceptOffer(G.S, d.v); if (wasAm && !G.S.amateur) G.tab = 'equipo'; after(r); },
     reject: (d) => { P.rejectOffer(G.S, d.v); after({ ok: true, msg: 'Oferta rechazada.' }); },
     negotiate: (d) => {
@@ -875,6 +945,91 @@
     newConfirm: () => { RC.clearSave(); G.S = null; G.confirmNew = false; G.modal = null; G.create = null; RC.render(); },
   };
 
+  function doAdvance() {
+    const wasAmateur = G.S.amateur;
+    const rep = P.advance(G.S);
+    RC.save();
+    if (!G.S.over) G.modal = reportModal(rep);
+    if (wasAmateur && !G.S.amateur) G.tab = 'equipo';
+    RC.render();
+  }
+
+  // ---------- Minijuegos ----------
+  RC.playMinigame = function (opts) {
+    const S = G.S;
+    const type = RC.MG.pick(S);
+    G.mg = Object.assign({ type, ease: RC.MG.ease(S, type), score: null }, opts);
+    G.modal = mgModal;
+    RC.render();
+  };
+  function mgModal() {
+    const m = G.mg;
+    const T = RC.MG.TYPES[m.type];
+    return `<div class="mg-head"><span class="badge gold">${esc(m.title || 'Minijuego')}</span><h2>${esc(T.name)}</h2>${m.reason ? `<p class="small" style="margin:4px 0 0">${esc(m.reason)}</p>` : ''}</div>
+      <div id="mg-box"><p>${esc(T.help)}</p>${m.sub ? `<p class="small muted">${esc(m.sub)}</p>` : ''}
+        <p class="small muted">Dificultad según tu ${esc(C.ATTR_NAME[T.attr])}: ${m.ease >= 1.05 ? 'algo más fácil' : m.ease <= 0.95 ? 'algo más difícil' : 'normal'}.</p>
+        <div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn" data-act="mgSim">Simular sin jugar</button><button class="btn primary" data-act="mgStart">Empezar</button></div></div>`;
+  }
+  function startMinigame() {
+    const box = document.getElementById('mg-box');
+    if (!box) return;
+    box.innerHTML = '<canvas id="mg-canvas" class="mg-canvas" aria-label="Minijuego"></canvas>';
+    const cv = document.getElementById('mg-canvas');
+    let n = 3;
+    const ctx = cv.getContext('2d');
+    const count = () => {
+      cv.width = 640; cv.height = 360;
+      ctx.fillStyle = '#0B1526'; ctx.fillRect(0, 0, 640, 360);
+      ctx.fillStyle = '#F5D08A'; ctx.font = '800 72px Inter, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(String(n), 320, 205);
+      if (n-- > 0) setTimeout(count, 550); else RC.MG.start(cv, G.mg.type, G.mg.ease, (sc) => finishMinigame(sc, false));
+    };
+    count();
+  }
+  function finishMinigame(score, simulated) {
+    G.mg.score = score;
+    const box = document.getElementById('mg-box');
+    if (!box) return;
+    const pct = Math.round(score * 100);
+    const verdict = pct >= 85 ? '¡Jugada perfecta!' : pct >= 60 ? 'Buena jugada' : pct >= 35 ? 'Regular' : 'Mala jugada';
+    box.innerHTML = `<div class="mg-res"><span class="num">${pct} %</span><b>${verdict}</b>${simulated ? '<small class="muted">Resultado simulado según tu nivel.</small>' : ''}</div>
+      <div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn primary" data-act="mgDone">Continuar</button></div>`;
+  }
+
+  // ---------- Hablar con jugadores ----------
+  function talkModal(pid) {
+    return () => {
+      const S = G.S;
+      const p = S.world.players[pid];
+      const t = p.team ? S.world.teams[p.team] : null;
+      const can = RC.EV.canContact(S, pid);
+      const mine = P.team(S);
+      return `<div class="row" style="gap:12px">${t ? teamLogo(t, 48) : ''}<div><h2>${esc(p.name)}</h2><span class="small muted">${C.ROLE_ES[p.role]} · ${p.age} años · media ${W.ovr(p).toFixed(0)}${t ? ' · ' + esc(t.name) : ''}</span></div></div>
+        <p class="small" style="margin:12px 0">¿Qué le dices?${can ? '' : ' <b class="bad">Hablaste con él hace poco: espera unas semanas.</b>'}</p>
+        <div class="stack" style="gap:8px">
+          <button class="opt-btn" data-act="talkDo" data-v="${pid}" data-k="pitch" ${can && mine ? '' : 'disabled'}><span>Proponerle venir a ${mine ? esc(mine.name) : 'tu equipo'}</span><span class="badge blue">Fichaje</span></button>
+          <button class="opt-btn" data-act="talkDo" data-v="${pid}" data-k="ask" ${can && t ? '' : 'disabled'}><span>Preguntarle si en ${t ? esc(t.name) : 'su equipo'} te querrían</span><span class="badge gold">Oferta</span></button>
+          <button class="opt-btn" data-act="talkDo" data-v="${pid}" data-k="friend" ${can ? '' : 'disabled'}><span>Charlar y hacer buenas migas</span><span class="badge win">Relación</span></button>
+        </div>
+        <div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn" data-act="closeModal">Cerrar</button></div>`;
+    };
+  }
+
+  // ---------- Petición de fichaje ----------
+  function reqModal() {
+    const S = G.S;
+    const role = G.reqRole;
+    G.reqCands[role] = G.reqCands[role] || RC.EV.candidates(S, role, 3);
+    const team = P.team(S);
+    const cur = S.world.players[team.roster[role]];
+    const st = RC.EV.status(S);
+    return `<h2>Pedir un fichaje</h2><p class="small muted" style="margin:4px 0 12px">Solo puedes hacer una petición por temporada. Como ${st.name.toLowerCase()}, el club ${st.w >= 0.8 ? 'casi siempre te hará caso' : st.w >= 0.5 ? 'suele hacerte caso' : 'rara vez te hará caso'}.</p>
+      <div class="seg sm">${C.ROLES.filter((r) => r !== S.pl.role).map((r) => `<button class="seg-b ${r === role ? 'on' : ''}" data-act="reqRole" data-v="${r}">${C.ROLE_ES[r]}</button>`).join('')}</div>
+      <p class="small">Ahora mismo: <b style="color:var(--bright)">${cur ? esc(cur.name) : '—'}</b> ${cur ? `<span class="num muted">${W.ovr(cur).toFixed(0)}</span>` : ''}</p>
+      <div class="stack" style="gap:8px">${G.reqCands[role].length ? G.reqCands[role].map((c) => { const p = S.world.players[c.pid]; const t = p.team ? S.world.teams[p.team] : null;
+        return `<button class="opt-btn" data-act="reqDo" data-v="${p.id}"><span class="team-cell">${t ? teamLogo(t, 26) : ''}<span><b>${esc(p.name)}</b> <span class="small muted">${p.age} años${t ? ' · ' + esc(t.short) + ' (' + esc(C.LEAGUES[t.league].name) + ')' : ' · libre'}</span></span></span><span class="row">${c.interested ? '<span class="badge win">Ya dijo que sí</span>' : ''}<span class="ovr sm">${W.ovr(p).toFixed(0)}</span></span></button>`; }).join('') : '<p class="muted">El club no encuentra a nadie mejor que pueda pagar para ese puesto.</p>'}</div>
+      <div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn" data-act="closeModal">Cancelar</button></div>`;
+  }
+
   function showExportText(txt) {
     G.modal = () => `<h2>Tu partida</h2><p class="small">Selecciona todo el texto y guárdalo en un archivo.</p><textarea class="input" rows="8" style="width:100%" readonly onclick="this.select()">${esc(txt)}</textarea><div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn" data-act="closeModal">Cerrar</button></div>`;
     RC.render();
@@ -897,6 +1052,7 @@
   }
 
   RC.migrate = (S) => {
+    if (S && S.world && !S.world.target) S.world.target = W.topMean(S.world);
     if (S && !S.amateur && S.world && S.cal) { Season.migrate(S); Season.prepareTurn(S); }
     return S;
   };
@@ -949,7 +1105,7 @@
       }
     });
     document.addEventListener('keydown', (ev) => {
-      if (ev.key === 'Escape' && G.modal) { G.modal = null; RC.render(); }
+      if (ev.key === 'Escape' && G.modal && !G.mg) { G.modal = null; RC.render(); }
     });
   };
 })(window.RC);
