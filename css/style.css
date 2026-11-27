@@ -453,3 +453,14 @@ h2.sec { margin: 22px 0 10px; }
 .strip-row .strip { flex: 1; min-width: 0; }
 .strip-lbl { font-family: var(--f-display); color: var(--gold-l); font-weight: 700; letter-spacing: .06em; white-space: nowrap; font-size: 14px; }
 @media (max-width: 600px) { .strip-row { flex-direction: column; align-items: stretch; gap: 6px; } .strip-row .st span { font-size: 9px; } }
+
+/* ---------- Fichas de equipo ---------- */
+.tlink { background: none; border: 0; padding: 0; cursor: pointer; color: inherit; font: inherit; text-align: left; }
+.tlink:hover .nm, .tlink:hover span { color: var(--gold-l); text-decoration: underline; text-underline-offset: 3px; }
+.tlink:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.linkish { background: none; border: 0; padding: 0; color: var(--gold-l); cursor: pointer; font: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.tcard { border: 1px solid var(--line2); border-radius: 4px; background: var(--panel2); padding: 12px; min-width: 0; }
+.tcard.me { border-color: var(--gold); }
+.rt-tbl { margin-top: 8px; }
+.rt-tbl td { padding: 5px 4px; font-size: 12.5px; }
+.rt-tbl tr.me td { background: rgba(200,155,60,.1); }

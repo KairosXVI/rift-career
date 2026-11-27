@@ -33,7 +33,7 @@ Marcador completo de los 10 jugadores en cada partida, ranking mundial de jugado
 Según tu media frente a la de tus compañeros y el tiempo en el club eres promesa, titular, estrella, capitán o jugador franquicia. Cuanto más importante, más caso te hace el club: una petición de fichaje por temporada y, si eres franquicia y el equipo va mal, te consultan a quién fichar. Desde la pestaña Mundo puedes hablar con cualquier jugador para proponerle venir, preguntar si su club te quiere o hacer amistad.
 
 ### Mercado
-Las ofertas llegan en pretemporada, durante el MSI y después de los Worlds. Puedes negociar el sueldo con 3 intentos dentro de un rango, o ofrecerte tú a cualquier equipo de las 17 ligas si cumples su nivel mínimo. Los extranjeros necesitan más nivel en Corea y China.
+Las ofertas de los clubes suelen llegar en pretemporada, durante el MSI y después de los Worlds, pero puedes ofrecerte a un equipo o aceptar una oferta en cualquier momento. Desde Mundo → Equipos y plantillas, o pulsando cualquier equipo, ves su plantilla y puedes hablar con sus jugadores. Si juegas en una academia (GIANTX Pride, KC Blue Stars, T1 Esports Academy…), su primer equipo te vigila y te pide con menos nivel del habitual. Puedes negociar el sueldo con 3 intentos dentro de un rango, o ofrecerte tú a cualquier equipo de las 17 ligas si cumples su nivel mínimo. Los extranjeros necesitan más nivel en Corea y China.
 
 ### Fin de la carrera
 Puedes retirarte desde los 27 años. A partir de esa edad los atributos bajan cada año. Si pasas un año entero sin equipo, la carrera termina. Las carreras acabadas se guardan en el Salón de la fama.

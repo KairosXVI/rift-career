@@ -207,6 +207,19 @@
     { id: 'elite', name: 'Staff de élite', desc: 'Ten 3 miembros del staff en nivel Élite.', money: 0, fans: 20000 },
   ];
 
+  // Academias y su primer equipo
+  C.ACADEMY = {
+    'GIANTX Pride': 'GIANTX', 'KC Blue Stars': 'Karmine Corp', 'Vitality Bee': 'Team Vitality', 'Vitality Rising Bees': 'Team Vitality',
+    'MKOI Fenix': 'Movistar KOI', 'Los Heretics': 'Team Heretics', 'G2 NORD': 'G2 Esports',
+    'BNK FearX Youth': 'BNK FearX', 'DN SOOPers Challengers': 'DN SOOPers', 'DRX Challengers': 'KIWOOM DRX', 'Dplus KIA Challengers': 'Dplus KIA',
+    'Gen.G Global Academy': 'Gen.G', 'HANJIN BRION Challengers': 'HANJIN BRION', 'Hanwha Life Esports Challengers': 'Hanwha Life Esports',
+    'KT Rolster Challengers': 'KT Rolster', 'Nongshim Esports Academy': 'Nongshim RedForce', 'T1 Esports Academy': 'T1',
+    "Anyone's Legend Young": "Anyone's Legend", 'Bilibili Gaming Junior': 'Bilibili Gaming', 'EDG Youth': 'EDward Gaming', 'IG Youth': 'Invictus Gaming',
+    'JDG Youth': 'JD Gaming', 'LGD Gaming Youth Team': 'LGD Gaming', 'LNG Esports Academy': 'LNG Esports', 'Oh My God Academy': 'Oh My God',
+    'TT Gaming Young': 'ThunderTalk Gaming', 'Team WE Academy': 'Team WE', 'Top Esports Challenger': 'TOP Esports', 'UP Academy': 'Ultra Prime',
+    'Weibo Gaming Youth Team': 'Weibo Gaming',
+  };
+
   C.MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
   RC.C = C;

@@ -107,9 +107,26 @@
     if (!S.world) S.world = W.init();
     const home = P.nation(S).home;
     const pool = W.leagueTeams(S, home).sort((a, b) => W.teamAvgOvr(S, a) - W.teamAvgOvr(S, b));
-    const picks = U.shuffle(pool.slice(0, Math.max(4, Math.ceil(pool.length * 0.6)))).slice(0, 3);
+    const weak = pool.slice(0, Math.max(4, Math.ceil(pool.length * 0.6)));
+    const acad = pool.filter((t) => C.ACADEMY[t.name] && !weak.includes(t));
+    const picks = U.shuffle(weak.concat(acad.slice(0, 1))).slice(0, 3);
     const L = C.LEAGUES[home];
     return picks.map((t) => ({ teamId: t.id, salary: Math.round((L.salary * U.rand(0.35, 0.55)) / 500) * 500, years: 2 }));
+  };
+
+  // ---------- Academias ----------
+  P.parentOf = (S, tid) => { const t = S.world.teams[tid]; const n = t && C.ACADEMY[t.name]; return n ? S.world.teams[U.slug(n)] || null : null; };
+  P.academyOf = (S, tid) => { const t = S.world.teams[tid]; if (!t) return null; const n = Object.keys(C.ACADEMY).find((k) => C.ACADEMY[k] === t.name); return n ? S.world.teams[U.slug(n)] || null : null; };
+  P.isParentOfMine = (S, tid) => { const p = S.pl.teamId && P.parentOf(S, S.pl.teamId); return !!p && p.id === tid; };
+
+  // El primer equipo vigila a los jugadores de su academia
+  P.academyPromotion = function (S, chance) {
+    const parent = S.pl.teamId && P.parentOf(S, S.pl.teamId);
+    if (!parent || S.offers.some((o) => o.teamId === parent.id)) return;
+    if (!P.wantsYou(S, parent).ok || !U.chance(chance + P.luck(S) / 100)) return;
+    P.makeOffer(S, parent.id, { ttl: 5, promo: true });
+    news(S, `¡${parent.name} quiere subirte al primer equipo!`, 'good');
+    if (RC.EV) RC.EV.msg(S, { from: { name: parent.name, kind: 'club', teamId: parent.id }, title: 'Subida al primer equipo', text: `Has destacado en la academia y ${parent.name} quiere que des el salto. Tienes la oferta en Mercado.` });
   };
 
   // ---------- Equipo y contratos ----------
@@ -418,7 +435,7 @@
     S.pl.history.push({ year: S.year, text: `Campeón: ${name}.` });
   };
 
-  P.onSplitEnd = function (S, phase, lg, place) {
+  P.onSplitEnd = function (S, phase, lg, place, LS) {
     const pl = S.pl;
     const L = C.LEAGUES[lg];
     const key = `${S.year} ${RC.Season.SPLIT_NAME[phase]}`;
@@ -430,13 +447,13 @@
     if (place === 1) P.addTitle(S, splitName, Math.round(25000 / L.tier), Math.round(L.salary * 0.15));
     else if (place === 2) { pl.money += Math.round(L.salary * 0.05); news(S, `Subcampeones de la ${L.name}.`); }
     if (st && st.g >= 6) {
-      const mvpChance = U.clamp((avg - 7.4) * 0.5 + (place <= 2 ? 0.15 : 0) - (place > 4 ? 0.3 : 0), 0, 0.7);
-      if (U.chance(mvpChance)) {
+      // El MVP y el equipo ideal salen de las estadísticas reales del split
+      if (LS && LS.mvp === 'USER') {
         pl.awards.push({ year: S.year, name: `MVP de la ${splitName}` });
         pl.fans += Math.round(15000 / L.tier);
         const b = P.boostAll(S, 0.6);
         news(S, `Te nombran MVP de la ${splitName}. +${b.toFixed(1)} a todos tus atributos.`, 'good');
-      } else if (avg >= 7.1) {
+      } else if (LS && LS.allPro && LS.allPro[pl.role] === 'USER') {
         pl.awards.push({ year: S.year, name: `Equipo ideal de la ${splitName}` });
         const b = P.boostAll(S, 0.3);
         news(S, `Entras en el equipo ideal de la ${splitName}. +${b.toFixed(1)} a todos tus atributos.`, 'good');
@@ -511,7 +528,8 @@
     const offer = {
       id: U.uid(), teamId: tid, salary: Math.max(500, offered), max, years: opts.years || U.randInt(1, 3),
       attempts: 3, expires: S.turn + (opts.ttl || 3), renewal: !!opts.renewal, academy: !!opts.academy, year: S.year,
-      buyout: !opts.renewal && S.pl.contract && S.pl.contract.endYear > S.year && S.pl.teamId !== tid ? S.pl.contract.buyout || S.pl.contract.salary * 2 : 0,
+      promo: !!opts.promo,
+      buyout: !opts.renewal && !opts.promo && S.pl.contract && S.pl.contract.endYear > S.year && S.pl.teamId !== tid ? S.pl.contract.buyout || S.pl.contract.salary * 2 : 0,
     };
     S.offers.push(offer);
     return offer;
@@ -523,9 +541,10 @@
     if (pid === 'USER') return { ok: false, why: 'Ya juegas aquí.' };
     const cur = S.world.players[pid];
     const o = P.ovr(S);
-    const req = P.leagueReq(S, team.league);
+    const promo = P.isParentOfMine(S, team.id);
+    const req = P.leagueReq(S, team.league) - (promo ? 3 : 0);
     if (o < req) return { ok: false, why: `Tu nivel (${o.toFixed(0)}) no llega al mínimo de la ${C.LEAGUES[team.league].name} (${req})${P.isForeign(S, team.league) && C.FOREIGN_EXTRA[team.league] ? ', con el extra por ser extranjero' : ''}.` };
-    if (cur && W.ovr(cur) > o + 1) return { ok: false, why: `Su ${C.ROLE_ES[role]} titular, ${cur.name} (${W.ovr(cur).toFixed(0)}), es mejor que tú.` };
+    if (cur && W.ovr(cur) > o + (promo ? 2.5 : 1)) return { ok: false, why: `Su ${C.ROLE_ES[role]} titular, ${cur.name} (${W.ovr(cur).toFixed(0)}), es mejor que tú.` };
     return { ok: true };
   };
 
@@ -554,13 +573,12 @@
   P.offerSelf = function (S, tid) {
     if (S.pl.selfOffersTurn !== S.turn) { S.pl.selfOffersTurn = S.turn; S.pl.selfOffersCount = 0; }
     if (S.pl.selfOffersCount >= 2) return { ok: false, msg: 'Solo puedes ofrecerte a 2 equipos por semana.' };
-    if (!RC.Season.isWindowOpen(S) && S.pl.teamId) return { ok: false, msg: 'El mercado está cerrado. Abre en pretemporada, durante el MSI y tras los Worlds.' };
     if (S.offers.some((o) => o.teamId === tid)) return { ok: false, msg: 'Ya tienes una oferta de este equipo.' };
     S.pl.selfOffersCount++;
     const team = S.world.teams[tid];
     const w = P.wantsYou(S, team);
     if (!w.ok) return { ok: false, msg: `${team.name} rechaza tu ofrecimiento. ${w.why}` };
-    if (!U.chance(0.75 + P.luck(S) / 100)) return { ok: false, msg: `${team.name} prefiere esperar a otro jugador. Prueba más adelante.` };
+    if (!U.chance((P.isParentOfMine(S, tid) ? 0.95 : 0.75) + P.luck(S) / 100)) return { ok: false, msg: `${team.name} prefiere esperar a otro jugador. Prueba más adelante.` };
     P.makeOffer(S, tid);
     return { ok: true, msg: `${team.name} está interesado y te envía una oferta.` };
   };
@@ -795,6 +813,7 @@
       if (t.kind === 'po' && t.round === 2) {
         P.checkSponsors(S);
         if (pl.teamId) pl.clubSplits = (pl.clubSplits || 0) + 1;
+        P.academyPromotion(S, 0.35);
         RC.EV.afterSplit(S, t.phase, report);
       }
     } else if (S.turn % 4 === 3) P.checkSponsors(S);
@@ -870,6 +889,7 @@
       if (pl.freeTurns >= S.cal.length) return endCareer(S, 'Llevas un año entero sin equipo. Ningún club apuesta por ti y te retiras.');
     }
     // Ventanas de mercado
+    if (t.phase === 'off' && t.round === 0) P.academyPromotion(S, 0.75);
     if (t.phase === 'off' || (t.phase === 'pre' && t.round === 0) || (t.phase === 'msi' && t.round === 0)) {
       if (pl.teamId) P.genOffers(S, U.randInt(0, 1) + (P.hasStaff(S, 'agente') ? 1 : 0) + (t.phase === 'off' && t.round === 0 ? 1 : 0));
     }

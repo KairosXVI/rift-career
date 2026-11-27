@@ -53,7 +53,7 @@
       const oppLine = line.board[userIn === 'A' ? 'B' : 'A'].find((x) => x.role === S.pl.role);
       if (oppLine) line.oppChamp = oppLine.champ;
     }
-    return { aWins, line };
+    return { aWins, line, board: line ? line.board : Sim.quickBoard(S, A, B, aWins) };
   };
 
   // Marcador completo de los 10 jugadores (solo para las partidas del usuario)
@@ -61,14 +61,14 @@
     const used = new Set([userChamp]);
     const side = (T, win) => C.ROLES.map((r) => {
       const pid = T.roster[r];
-      if (pid === 'USER') return { role: r, name: S.pl.name, champ: userChamp, k: userLine.k, d: userLine.d, a: userLine.a, cs: userLine.cs, rating: userLine.rating, user: true };
+      if (pid === 'USER') return { pid: 'USER', role: r, name: S.pl.name, champ: userChamp, k: userLine.k, d: userLine.d, a: userLine.a, cs: userLine.cs, rating: userLine.rating, user: true };
       const p = S.world.players[pid];
       const pool = (p ? p.pool : []).filter((c) => !used.has(c));
       const opts = pool.length ? pool : RC.D.champsForRole(r).filter((c) => !used.has(c));
       const champ = opts.slice().sort((x, y) => (S.patch.meta[y] || 0) - (S.patch.meta[x] || 0) + U.gauss() * 0.8)[0];
       used.add(champ);
       const st = statLine(r, U.gauss() * 0.9, win, null);
-      return Object.assign({ role: r, name: p ? p.name : '?', champ }, st);
+      return Object.assign({ pid, role: r, name: p ? p.name : '?', champ }, st);
     });
     const board = { A: side(A, aWins), B: side(B, !aWins) };
     // Que cuadren: las muertes de un equipo suman los asesinatos del rival y nadie asiste más de lo que mata su equipo
@@ -88,6 +88,32 @@
     if (me) { userLine.d = me.d; userLine.a = me.a; }
     return board;
   };
+
+  // Estadísticas rápidas de los 10 jugadores en partidas sin el usuario (para los rankings del split)
+  Sim.quickBoard = function (S, A, B, aWins) {
+    const side = (T, O, win) => C.ROLES.map((r) => {
+      const p = S.world.players[T.roster[r]], o = S.world.players[O.roster[r]];
+      const perf = U.clamp(((p ? W.npcEff(S, p) : 70) - (o ? W.npcEff(S, o) : 70)) / 5, -1.5, 1.5) + U.gauss() * 0.8;
+      return Object.assign({ pid: T.roster[r], role: r }, statLine(r, perf, win, null));
+    });
+    const board = { A: side(A, B, aWins), B: side(B, A, !aWins) };
+    fixBoard(board);
+    return board;
+  };
+  function fixBoard(board) {
+    const fix = (mine, enemy) => {
+      const ek = U.sum(enemy.map((r) => r.k));
+      const sd = U.sum(mine.map((r) => r.d)) || 1;
+      mine.forEach((r) => (r.d = Math.round((r.d * ek) / sd)));
+      const diff = ek - U.sum(mine.map((r) => r.d));
+      const top = mine.slice().sort((x, y) => y.d - x.d)[0];
+      top.d = Math.max(0, top.d + diff);
+      const tk = U.sum(mine.map((r) => r.k));
+      mine.forEach((r) => (r.a = Math.min(r.a, Math.max(0, tk - r.k))));
+    };
+    fix(board.A, board.B);
+    fix(board.B, board.A);
+  }
 
   function statLine(role, perf, win, style) {
     const b = BASE[role];
@@ -127,7 +153,7 @@
     const A = S.world.teams[aId], B = S.world.teams[bId];
     const need = Math.ceil(bo / 2);
     let sa = 0, sb = 0;
-    const games = [];
+    const games = [], boards = [];
     const userIn = A.roster[S.pl.role] === 'USER' || B.roster[S.pl.role] === 'USER';
     if (userIn) { const st = RC.EV && RC.EV.status(S); S.pl.capitan = !!st && st.id === 'capitan'; }
     let clutch = null;
@@ -141,9 +167,10 @@
       const g = Sim.playGame(S, A, B, cp);
       if (g.aWins) sa++; else sb++;
       if (g.line) { if (cp != null) { g.line.clutch = true; clutch.won = g.line.win; } games.push(g.line); }
+      boards.push(g.board);
     }
     if (clutch) delete S.pl.clutch;
-    return { a: aId, b: bId, sa, sb, winner: sa > sb ? aId : bId, loser: sa > sb ? bId : aId, bo, games, clutch };
+    return { a: aId, b: bId, sa, sb, winner: sa > sb ? aId : bId, loser: sa > sb ? bId : aId, bo, games, clutch, boards };
   };
 
   RC.Sim = Sim;

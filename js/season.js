@@ -101,7 +101,7 @@
       while (rounds.length < REG_ROUNDS) rounds = rounds.concat(rounds.map((r) => r.map(([a, b]) => [b, a])));
       const table = {};
       teams.forEach((t) => (table[t] = { w: 0, l: 0, gw: 0, gl: 0 }));
-      leagues[lg] = { teams, sched: rounds.slice(0, REG_ROUNDS).map((r) => r.map(([a, b]) => ({ a, b, bo: 1, res: null }))), table, po: null, champion: null, place: null };
+      leagues[lg] = { stats: {}, teams, sched: rounds.slice(0, REG_ROUNDS).map((r) => r.map(([a, b]) => ({ a, b, bo: 1, res: null }))), table, po: null, champion: null, place: null };
     }
     S.comp.split = { id: phase, leagues };
   }
@@ -210,10 +210,32 @@
     }
   }
 
+  // Acumula las estadísticas de cada jugador en el split (o torneo)
+  function addStats(stats, res) {
+    for (const b of res.boards || []) {
+      const win = { A: res.a, B: res.b };
+      for (const side of ['A', 'B']) {
+        for (const r of b[side]) {
+          if (!r.pid) continue;
+          const x = (stats[r.pid] = stats[r.pid] || { g: 0, w: 0, k: 0, d: 0, a: 0, cs: 0, r: 0, team: win[side], role: r.role });
+          x.g++; x.k += r.k; x.d += r.d; x.a += r.a; x.cs += r.cs; x.r += r.rating; x.team = win[side];
+        }
+      }
+    }
+  }
+  Season.statRows = function (S, stats, minG = 1) {
+    return Object.entries(stats || {}).filter(([, x]) => x.g >= minG).map(([pid, x]) => {
+      const p = pid === 'USER' ? null : S.world.players[pid];
+      return { pid, name: pid === 'USER' ? S.pl.name : p ? p.name : '?', role: x.role, team: x.team, g: x.g, k: x.k, d: x.d, a: x.a,
+        kda: (x.k + x.a) / Math.max(1, x.d), kpg: x.k / x.g, cs: x.cs / x.g, r: x.r / x.g, user: pid === 'USER' };
+    });
+  };
+
   // Juega una serie y avisa si participa el usuario
   function play(S, m, ctx, report) {
     const res = Sim.playSeries(S, m.a, m.b, m.bo);
     m.res = { winner: res.winner, loser: res.loser, sa: res.sa, sb: res.sb };
+    if (ctx.stats) addStats(ctx.stats, res);
     const uid = S.pl.teamId;
     if (uid && (m.a === uid || m.b === uid)) {
       RC.P.recordSeries(S, res, ctx);
@@ -381,7 +403,7 @@
         for (const [lg, L] of Object.entries(S.comp.split.leagues)) {
           for (const m of L.sched[t.round]) {
             if (m.res) continue;
-            const r = play(S, m, { comp: C.LEAGUES[lg].name, label: Season.turnLabel(S, t) }, report);
+            const r = play(S, m, { comp: C.LEAGUES[lg].name, label: Season.turnLabel(S, t), stats: L.stats }, report);
             const ta = L.table[m.a], tb = L.table[m.b];
             (r.winner === m.a ? ta : tb).w++;
             (r.winner === m.a ? tb : ta).l++;
@@ -390,7 +412,7 @@
         }
       } else {
         for (const [lg, L] of Object.entries(S.comp.split.leagues)) {
-          for (const m of L.po.rounds[t.round]) if (!m.res) play(S, m, { comp: C.LEAGUES[lg].name, label: Season.turnLabel(S, t), playoff: true }, report);
+          for (const m of L.po.rounds[t.round]) if (!m.res) play(S, m, { comp: C.LEAGUES[lg].name, label: Season.turnLabel(S, t), playoff: true, stats: L.stats }, report);
           if (t.round === 2 && !L.champion) finishSplit(S, t.phase, lg, L, report);
         }
       }
@@ -398,7 +420,7 @@
     }
     if (t.phase !== 'msi' && t.phase !== 'worlds') return report;
     for (const x of intlMatches(S, t)) {
-      if (!x.m.res) play(S, x.m, { comp: x.ev.name, label: x.ev.name + ' · ' + x.stage, playoff: x.m.bo > 1, intl: x.ev.id }, report);
+      if (!x.m.res) play(S, x.m, { comp: x.ev.name, label: x.ev.name + ' · ' + x.stage, playoff: x.m.bo > 1, intl: x.ev.id, stats: (x.ev.stats = x.ev.stats || {}) }, report);
     }
     if (t.phase === 'msi') afterMSI(S, t.round, report);
     else afterWorlds(S, t.round, report);
@@ -414,8 +436,19 @@
     S.comp.done[phase][lg] = { champion: L.champion, place: L.place, table: Season.sortedTable(L).map((r) => r.tid) };
     const champ = S.world.teams[L.champion];
     if (C.LEAGUES[lg].major) report.headlines.push(`${champ.name} gana el ${Season.SPLIT_NAME[phase]} de la ${C.LEAGUES[lg].name}.`);
+    // MVP (mejor nota media con al menos 6 partidas, con bonus por posición) y equipo ideal por rol
+    const rows = Season.statRows(S, L.stats, 6);
+    const place = (r) => L.place[r.team] || 9;
+    const score = (r) => r.r + (place(r) <= 2 ? 0.25 : place(r) <= 4 ? 0.1 : 0);
+    if (rows.length) {
+      const mvp = rows.slice().sort((a, b) => score(b) - score(a))[0];
+      L.mvp = mvp.pid;
+      L.allPro = {};
+      for (const role of C.ROLES) { const best = rows.filter((r) => r.role === role).sort((a, b) => score(b) - score(a))[0]; if (best) L.allPro[role] = best.pid; }
+      if (C.LEAGUES[lg].tier <= 2 && !mvp.user) report.headlines.push(`${mvp.name} es el MVP del ${Season.SPLIT_NAME[phase]} de la ${C.LEAGUES[lg].name}.`);
+    }
     const uid = S.pl.teamId;
-    if (uid && L.place[uid]) RC.P.onSplitEnd(S, phase, lg, L.place[uid]);
+    if (uid && L.place[uid]) RC.P.onSplitEnd(S, phase, lg, L.place[uid], L);
   }
 
   const lostIn = (list, uid) => (list || []).some((m) => m && m.res && m.res.loser === uid);

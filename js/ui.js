@@ -37,6 +37,8 @@
     if (src) return `<img class="logo" style="--s:${s}px" src="${src}" alt="${esc(team.short)}">`;
     return `<div class="logo-txt" style="--s:${s}px;background:${team.color}">${esc(team.short.slice(0, 4))}</div>`;
   };
+  // Nombre de equipo clicable: abre su ficha con la plantilla
+  const teamLink = (t, s = 24, full = true) => `<button class="team-cell tlink" data-act="team" data-v="${t.id}" title="Ver plantilla">${teamLogo(t, s)}<span class="nm">${esc(full ? t.name : t.short)}</span></button>`;
   const champImg = (id, s = 40) => `<img class="champ" style="--s:${s}px" src="${D.champImg(id)}" alt="${esc(D.champName(id))}" title="${esc(D.champName(id))}">`;
   const bar = (v, max = 100, cls = '') => `<div class="bar ${cls}"><i style="width:${U.clamp((v / max) * 100, 0, 100)}%"></i></div>`;
   const tierBadge = (champ) => { const t = P.tierOf(P.meta(G.S, champ)); return `<span class="tier tier-${t}" title="Tier ${t} en el parche">${t}</span>`; };
@@ -534,7 +536,7 @@
     }
     const rows = Season.sortedTable(L).map((r, i) => {
       const t = S.world.teams[r.tid];
-      return `<tr class="${r.tid === S.pl.teamId ? 'me' : ''}"><td class="num"><span class="pos ${i < 6 ? 'po' : ''}">${i + 1}</span></td><td><div class="team-cell">${teamLogo(t, 24)}<span class="nm">${esc(t.name)}</span></div></td><td class="c num">${r.w}</td><td class="c num">${r.l}</td><td class="c num muted">${r.gw - r.gl > 0 ? '+' : ''}${r.gw - r.gl}</td><td class="r num muted">${W.teamAvgOvr(S, t).toFixed(1)}</td></tr>`;
+      return `<tr class="${r.tid === S.pl.teamId ? 'me' : ''}"><td class="num"><span class="pos ${i < 6 ? 'po' : ''}">${i + 1}</span></td><td>${teamLink(t, 24)}</td><td class="c num">${r.w}</td><td class="c num">${r.l}</td><td class="c num muted">${r.gw - r.gl > 0 ? '+' : ''}${r.gw - r.gl}</td><td class="r num muted">${W.teamAvgOvr(S, t).toFixed(1)}</td></tr>`;
     }).join('');
     const firstOpen = L.sched.findIndex((r) => !r[0].res);
     const showRound = G.ligaRound != null ? G.ligaRound : Math.max(0, Math.min(8, (firstOpen === -1 ? 9 : firstOpen) - 1));
@@ -543,7 +545,28 @@
       <div><div class="row between" style="margin-bottom:8px"><h3>Jornada ${showRound + 1}</h3><div class="row">${L.sched.map((_, i) => `<button class="rd ${i === showRound ? 'on' : ''}" data-act="ligaRound" data-v="${i}">${i + 1}</button>`).join('')}</div></div>
       ${L.sched[showRound].map((m) => resultLine(S, m)).join('')}</div></div>`;
     if (L.po) html += `<h3 style="margin:18px 0 10px">Playoffs</h3>${bracketHtml(S, L.po.rounds, [2, 2, 1])}`;
-    return html + '</div>';
+    html += '</div>' + statsPanel(S, L, `${Season.SPLIT_NAME[sp.id]} · ${C.LEAGUES[lg].name}`);
+    return html;
+  }
+
+  // Ranking de estadísticas del split o torneo
+  function statsPanel(S, L, title) {
+    const rows = Season.statRows(S, L.stats, 1);
+    if (!rows.length) return '';
+    const maxG = Math.max(...rows.map((r) => r.g));
+    const qual = rows.filter((r) => r.g >= Math.max(1, Math.ceil(maxG * 0.5)));
+    const sorts = [['r', 'Nota media'], ['k', 'Asesinatos'], ['kda', 'KDA'], ['kpg', 'Asesinatos/partida'], ['cs', 'CS/min']];
+    const key = G.statSort || 'r';
+    const list = qual.slice().sort((a, b) => b[key] - a[key]);
+    const top = list.slice(0, 12);
+    const myIdx = list.findIndex((r) => r.user);
+    const row = (r, i) => { const t = S.world.teams[r.team]; return `<tr class="${r.user ? 'me' : ''}"><td class="num">${i + 1}</td><td><b style="color:var(--bright)">${esc(r.name)}</b> <span class="small muted">${C.ROLE_ES[r.role]}</span></td><td>${t ? `<button class="team-cell tlink" data-act="team" data-v="${t.id}">${teamLogo(t, 20)}<span class="small">${esc(t.short)}</span></button>` : ''}</td><td class="r num">${r.g}</td><td class="r num">${r.k}/${r.d}/${r.a}</td><td class="r num hide-s">${r.kda.toFixed(2)}</td><td class="r num hide-s">${r.cs.toFixed(1)}</td><td class="r"><span class="rt num ${r.r >= 7.5 ? 'hi' : r.r < 5.8 ? 'lo' : ''}">${r.r.toFixed(2)}</span></td>${r.user || !r.pid || r.team === S.pl.teamId ? '<td></td>' : `<td class="r"><button class="btn sm" data-act="talk" data-v="${r.pid}">Hablar</button></td>`}</tr>`; };
+    const mvp = L.mvp ? rows.find((r) => r.pid === L.mvp) : null;
+    return `<div class="panel" style="margin-top:16px"><div class="panel-h"><h2>Estadísticas · ${esc(title)}</h2><div class="seg sm">${sorts.map(([id, n]) => `<button class="seg-b ${key === id ? 'on' : ''}" data-act="statSort" data-v="${id}">${n}</button>`).join('')}</div></div>
+      ${mvp ? `<div class="alert" style="margin-bottom:10px"><b class="gold">MVP:</b> ${esc(mvp.name)} (${mvp.r.toFixed(2)} de nota) · <b class="gold">Equipo ideal:</b> ${C.ROLES.map((ro) => { const r = rows.find((x) => x.pid === (L.allPro || {})[ro]); return r ? esc(r.name) : '—'; }).join(', ')}</div>` : ''}
+      <div class="tbl-wrap"><table><thead><tr><th>#</th><th>Jugador</th><th>Equipo</th><th class="r">Part.</th><th class="r">K/D/A</th><th class="r hide-s">KDA</th><th class="r hide-s">CS/min</th><th class="r">Nota</th><th></th></tr></thead>
+      <tbody>${top.map(row).join('')}${myIdx >= 12 ? `<tr><td colspan="9" class="c muted">…</td></tr>${row(list[myIdx], myIdx)}` : ''}</tbody></table></div>
+      <p class="small muted" style="margin:8px 0 0">Entran los jugadores con al menos la mitad de partidas que el que más ha jugado. Pulsa un equipo para ver su plantilla.</p></div>`;
   }
 
   // Tarjeta de partido para cuadros
@@ -584,6 +607,7 @@
       <div class="bk bk4"><div class="bk-col">${pad(d.ub[0], 4, 'Cuartos superior')}</div><div class="bk-col">${pad(d.ub[1], 2, 'Semis superior')}</div><div class="bk-col">${pad(d.ub[2], 1, 'Final superior')}</div><div class="bk-col gf">${mcard(S, d.gf, 'Gran Final')}</div></div>
       <h3 class="bk-t">Cuadro inferior</h3>
       <div class="bk bk4"><div class="bk-col">${pad(d.lb[0], 2, 'Inferior · R1')}</div><div class="bk-col">${pad(d.lb[1], 2, 'Inferior · R2')}</div><div class="bk-col">${pad(d.lb[2], 1, 'Inferior · R3')}</div><div class="bk-col">${pad(d.lb[3], 1, 'Final inferior')}</div></div>`}</div>`;
+    if (e.stats) html += statsPanel(S, e, 'MSI ' + S.year);
     return html;
   }
 
@@ -591,7 +615,7 @@
     const e = S.comp && S.comp.emea;
     let html = intlHeader('EMEA Masters', e, S, 'El torneo de las ligas regionales europeas: campeones de LES, LFL, Prime League, NLC y TCL, y subcampeones de LES, LFL y Prime League. Eliminatorias a Bo5.');
     if (!e) return html + '<div class="panel"><p class="muted">Se juega durante el MSI con los mejores equipos del Spring Split de las ligas regionales.</p></div>';
-    return html + `<div class="panel">${bracketHtml(S, e.rounds)}</div>`;
+    return html + `<div class="panel">${bracketHtml(S, e.rounds)}</div>` + (e.stats ? statsPanel(S, e, 'EMEA Masters ' + S.year) : '');
   }
 
   function viewWorlds(S) {
@@ -618,6 +642,7 @@
         <div><h3 class="bad" style="margin-bottom:8px">Eliminados (3 derrotas)</h3><div class="chips-grid">${byRec(sw.out) || '<span class="muted small">Todavía ninguno</span>'}</div></div></div></div>`;
     }
     if (e.ko) html += `<h2 class="sec">Eliminatorias</h2><div class="panel">${bracketHtml(S, e.ko.rounds)}</div>`;
+    if (e.stats) html += statsPanel(S, e, 'Worlds ' + S.year);
     return html;
   }
 
@@ -673,6 +698,61 @@
   // ----- Mundo: rankings -----
   function tabMundo() {
     const S = G.S;
+    const view = G.mundoView || 'jugadores';
+    const seg = `<div class="seg">${[['jugadores', 'Mejores jugadores'], ['equipos', 'Equipos y plantillas']].map(([id, n]) => `<button class="seg-b ${view === id ? 'on' : ''}" data-act="mundoView" data-v="${id}">${n}</button>`).join('')}</div>`;
+    if (view === 'equipos') return seg + viewTeams(S);
+    return seg + viewPlayers(S);
+  }
+
+  function viewTeams(S) {
+    const lg = G.teamsLeague || (P.team(S) ? P.team(S).league : 'LEC');
+    const teams = W.leagueTeams(S, lg).sort((a, b) => W.teamAvgOvr(S, b) - W.teamAvgOvr(S, a));
+    return `<div class="panel"><div class="panel-h"><h2>${esc(C.LEAGUES[lg].full)}</h2><select class="input" id="tm-lg" data-bind="teamsLeague">${C.LEAGUE_ORDER.map((x) => `<option value="${x}" ${x === lg ? 'selected' : ''}>${esc(C.LEAGUES[x].full)}</option>`).join('')}</select></div>
+      <div class="grid g3">${teams.map((t) => `<div class="tcard ${t.id === S.pl.teamId ? 'me' : ''}"><div class="row between">${teamLink(t, 34)}<span class="ovr sm">${W.teamAvgOvr(S, t).toFixed(0)}</span></div>
+        ${academyLine(S, t)}${rosterRows(S, t, true)}</div>`).join('')}</div></div>`;
+  }
+
+  function academyLine(S, t) {
+    const par = P.parentOf(S, t.id), ac = P.academyOf(S, t.id);
+    if (par) return `<p class="small muted" style="margin:6px 0 0">Academia de <button class="linkish" data-act="team" data-v="${par.id}">${esc(par.name)}</button></p>`;
+    if (ac) return `<p class="small muted" style="margin:6px 0 0">Su academia: <button class="linkish" data-act="team" data-v="${ac.id}">${esc(ac.name)}</button></p>`;
+    return '';
+  }
+
+  // Filas de plantilla con botón para hablar
+  function rosterRows(S, t, compact) {
+    const stats = S.comp && S.comp.split && S.comp.split.leagues[t.league] ? S.comp.split.leagues[t.league].stats : null;
+    return `<table class="rt-tbl"><tbody>${C.ROLES.map((r) => {
+      const pid = t.roster[r];
+      const user = pid === 'USER';
+      const p = user ? null : S.world.players[pid];
+      const st = stats && stats[user ? 'USER' : pid];
+      const name = user ? S.pl.name : p ? p.name : '—';
+      const o = user ? P.ovr(S) : p ? W.ovr(p) : 0;
+      const pool = user ? S.pl.pool : p ? p.pool : [];
+      return `<tr class="${user ? 'me' : ''}"><td class="small muted">${C.ROLE_ES[r]}</td><td><b style="color:var(--bright)">${esc(name)}</b>${!compact && p ? ` <span class="small muted">${p.age} años</span>` : ''}</td>
+        ${compact ? '' : `<td class="hide-s"><span class="row" style="gap:3px">${pool.slice(0, 4).map((c) => champImg(c, 22)).join('')}</span></td><td class="r num small hide-s">${st ? `${st.k}/${st.d}/${st.a} · ${(st.r / st.g).toFixed(1)}` : ''}</td>`}
+        <td class="r"><span class="ovr sm">${o ? o.toFixed(0) : ''}</span></td>
+        <td class="r">${user || !p || t.id === S.pl.teamId ? '' : `<button class="btn sm" data-act="talk" data-v="${p.id}" data-back="${t.id}">Hablar</button>`}</td></tr>`;
+    }).join('')}</tbody></table>`;
+  }
+
+  function teamModal(tid) {
+    return () => {
+      const S = G.S;
+      const t = S.world.teams[tid];
+      const L = S.comp && S.comp.split && S.comp.split.leagues[t.league];
+      const rank = L ? Season.sortedTable(L).findIndex((r) => r.tid === tid) + 1 : 0;
+      const mine = t.id === S.pl.teamId;
+      const w = mine ? null : P.wantsYou(S, t);
+      return `<div class="row" style="gap:14px">${teamLogo(t, 64)}<div style="min-width:0"><h2>${esc(t.name)}</h2><span class="small muted">${esc(C.LEAGUES[t.league].full)} · media ${W.teamAvgOvr(S, t).toFixed(1)}${rank ? ` · ${rank}º en el split` : ''}</span>${academyLine(S, t)}</div></div>
+        <div style="margin-top:14px">${rosterRows(S, t, false)}</div>
+        ${mine ? '' : `<p class="small ${w.ok ? 'good' : 'muted'}" style="margin:12px 0 0">${w.ok ? 'Cumples lo que buscan para tu puesto: puedes ofrecerte cuando quieras.' : esc(w.why)}</p>`}
+        <div class="row" style="justify-content:flex-end;margin-top:12px">${mine ? '' : `<button class="btn blue" data-act="offerSelfT" data-v="${t.id}">Ofrecerme a ${esc(t.short)}</button>`}<button class="btn" data-act="closeModal">Cerrar</button></div>`;
+    };
+  }
+
+  function viewPlayers(S) {
     const role = G.mundoRole || 'all';
     const me = { id: 'USER', name: S.pl.name, role: S.pl.role, age: S.pl.age, team: S.pl.teamId, ovr: P.ovr(S), user: true };
     const all = Object.values(S.world.players).filter((p) => p.team).map((p) => ({ id: p.id, name: p.name, role: p.role, age: p.age, team: p.team, ovr: W.ovr(p) })).concat([me]);
@@ -680,13 +760,13 @@
     const myPos = list.findIndex((p) => p.user) + 1;
     const top = list.slice(0, 25);
     const teams = Object.values(S.world.teams).map((t) => ({ t, o: W.teamAvgOvr(S, t) })).sort((a, b) => b.o - a.o).slice(0, 20);
-    const row = (p, i) => { const t = S.world.teams[p.team]; return `<tr class="${p.user ? 'me' : ''}"><td class="num">${i + 1}</td><td><b style="color:var(--bright)">${esc(p.name)}</b></td><td class="small">${C.ROLE_ES[p.role]}</td><td>${t ? `<div class="team-cell">${teamLogo(t, 22)}<span class="small">${esc(t.short)} · ${esc(C.LEAGUES[t.league].name)}</span></div>` : '<span class="muted">Libre</span>'}</td><td class="r num">${p.age}</td><td class="r"><span class="ovr sm">${p.ovr.toFixed(0)}</span></td><td class="r">${p.user || p.team === S.pl.teamId ? '' : `<button class="btn sm" data-act="talk" data-v="${p.id}">Hablar</button>`}</td></tr>`; };
+    const row = (p, i) => { const t = S.world.teams[p.team]; return `<tr class="${p.user ? 'me' : ''}"><td class="num">${i + 1}</td><td><b style="color:var(--bright)">${esc(p.name)}</b></td><td class="small">${C.ROLE_ES[p.role]}</td><td>${t ? `<button class="team-cell tlink" data-act="team" data-v="${t.id}">${teamLogo(t, 22)}<span class="small">${esc(t.short)} · ${esc(C.LEAGUES[t.league].name)}</span></button>` : '<span class="muted">Libre</span>'}</td><td class="r num">${p.age}</td><td class="r"><span class="ovr sm">${p.ovr.toFixed(0)}</span></td><td class="r">${p.user || p.team === S.pl.teamId ? '' : `<button class="btn sm" data-act="talk" data-v="${p.id}">Hablar</button>`}</td></tr>`; };
     return `<div class="grid g2" style="align-items:start">
       <div class="panel"><div class="panel-h"><h2>Mejores jugadores</h2><div class="seg sm">${[['all', 'Todos']].concat(C.ROLES.map((r) => [r, C.ROLE_ES[r]])).map(([id, n]) => `<button class="seg-b ${role === id ? 'on' : ''}" data-act="mundoRole" data-v="${id}">${n}</button>`).join('')}</div></div>
         <p class="small" style="margin:0 0 10px">Tu posición: <b class="gold num">${myPos}º</b> de ${list.length}${role === 'all' ? '' : ' en tu rol'}.</p>
         <div class="tbl-wrap"><table><thead><tr><th>#</th><th>Jugador</th><th>Rol</th><th>Equipo</th><th class="r">Edad</th><th class="r">Media</th><th></th></tr></thead><tbody>${top.map(row).join('')}${myPos > 25 ? `<tr><td colspan="7" class="c muted">…</td></tr>${row(me, myPos - 1)}` : ''}</tbody></table></div></div>
       <div class="panel"><div class="panel-h"><h2>Power ranking</h2><span class="small muted">Media de la plantilla</span></div>
-        <div class="tbl-wrap"><table><tbody>${teams.map((x, i) => `<tr class="${x.t.id === S.pl.teamId ? 'me' : ''}"><td class="num">${i + 1}</td><td><div class="team-cell">${teamLogo(x.t, 26)}<span class="nm">${esc(x.t.name)}</span></div></td><td class="small muted">${esc(C.LEAGUES[x.t.league].name)}</td><td class="r num">${x.o.toFixed(1)}</td></tr>`).join('')}</tbody></table></div></div>
+        <div class="tbl-wrap"><table><tbody>${teams.map((x, i) => `<tr class="${x.t.id === S.pl.teamId ? 'me' : ''}"><td class="num">${i + 1}</td><td>${teamLink(x.t, 26)}</td><td class="small muted">${esc(C.LEAGUES[x.t.league].name)}</td><td class="r num">${x.o.toFixed(1)}</td></tr>`).join('')}</tbody></table></div></div>
     </div>`;
   }
 
@@ -694,8 +774,8 @@
   function tabMercado() {
     const S = G.S;
     const offers = S.offers.map((o) => offerCard(S, o)).join('');
-    let html = `<div class="panel"><div class="panel-h"><h2>Ofertas recibidas</h2>${S.amateur ? '' : `<span class="badge ${Season.isWindowOpen(S) ? 'win' : 'loss'}">${Season.isWindowOpen(S) ? 'Mercado abierto' : 'Mercado cerrado'}</span>`}</div>
-      ${offers ? `<div class="grid g2">${offers}</div>` : `<p class="muted">${S.amateur ? scoutHint(S) : 'No tienes ofertas ahora mismo. El mercado abre en pretemporada, durante el MSI y tras los Worlds. Si juegas bien, los equipos vendrán a por ti.'}</p>`}</div>`;
+    let html = `<div class="panel"><div class="panel-h"><h2>Ofertas recibidas</h2>${S.amateur ? '' : `<span class="badge ${Season.isWindowOpen(S) ? 'win' : 'blue'}">${Season.isWindowOpen(S) ? 'Ventana de fichajes' : 'Fuera de ventana'}</span>`}</div>
+      ${offers ? `<div class="grid g2">${offers}</div>` : `<p class="muted">${S.amateur ? scoutHint(S) : 'No tienes ofertas ahora mismo. Los clubes suelen escribir en pretemporada, durante el MSI y tras los Worlds, pero puedes ofrecerte o aceptar ofertas en cualquier momento.'}</p>`}</div>`;
     if (S.amateur) return html;
     const rum = S.rumors || [];
     html += `<div class="panel" style="margin-top:16px"><div class="panel-h"><h2>Rumores</h2></div>${rum.length ? `<div class="feed">${rum.slice(0, 10).map((r) => `<div class="${r.you ? 'good' : ''}"><small>${esc(r.when)}</small>${esc(r.text)}</div>`).join('')}</div>` : '<p class="small muted">Sin rumores por ahora.</p>'}</div>`;
@@ -709,7 +789,7 @@
         const pid = t.roster[S.pl.role];
         const p = pid && pid !== 'USER' ? S.world.players[pid] : null;
         const mine = pid === 'USER';
-        return `<tr class="${mine ? 'me' : ''}"><td><div class="team-cell">${teamLogo(t, 26)}<span class="nm">${esc(t.name)}</span></div></td><td>${mine ? '<b class="gold">Tú</b>' : p ? esc(p.name) + ` <span class="num muted">${W.ovr(p).toFixed(0)}</span>` : '—'}</td><td class="r num">${W.teamAvgOvr(S, t).toFixed(1)}</td>
+        return `<tr class="${mine ? 'me' : ''}"><td>${teamLink(t, 26)}${P.isParentOfMine(S, t.id) ? ' <span class="badge gold">Tu primer equipo</span>' : ''}</td><td>${mine ? '<b class="gold">Tú</b>' : p ? esc(p.name) + ` <span class="num muted">${W.ovr(p).toFixed(0)}</span>` : '—'}</td><td class="r num">${W.teamAvgOvr(S, t).toFixed(1)}</td>
           <td class="r">${mine ? '' : `<button class="btn sm" data-act="offerSelf" data-v="${t.id}">Ofrecerme</button>`}</td></tr>`;
       }).join('')}</tbody></table></div></div>`;
     return html;
@@ -721,7 +801,7 @@
     const val = G.negAmount[o.id] || Math.round((o.salary * 1.15) / 500) * 500;
     return `<div class="panel" style="background:var(--panel2)">
       <div class="team-cell">${teamLogo(t, 48)}<div style="min-width:0"><div class="nm">${esc(t.name)}</div><div class="small muted">${esc(C.LEAGUES[t.league].full)} · media ${W.teamAvgOvr(S, t).toFixed(1)}</div></div></div>
-      <div class="row" style="margin:8px 0">${o.renewal ? '<span class="badge blue">Renovación</span>' : ''}${o.academy ? '<span class="badge gold">Academia</span>' : ''}<span class="badge">${o.years} año${o.years > 1 ? 's' : ''}</span><span class="badge">Caduca en ${Math.max(1, o.expires - S.turn)} ${S.amateur ? 'mes(es)' : 'semana(s)'}</span>${o.buyout ? `<span class="badge gold">Pagan tu cláusula: ${U.money(o.buyout)}</span>` : ''}</div>
+      <div class="row" style="margin:8px 0">${o.renewal ? '<span class="badge blue">Renovación</span>' : ''}${o.academy ? '<span class="badge gold">Academia</span>' : ''}${o.promo ? '<span class="badge gold">Subida al primer equipo</span>' : ''}<span class="badge">${o.years} año${o.years > 1 ? 's' : ''}</span><span class="badge">Caduca en ${Math.max(1, o.expires - S.turn)} ${S.amateur ? 'mes(es)' : 'semana(s)'}</span>${o.buyout ? `<span class="badge gold">Pagan tu cláusula: ${U.money(o.buyout)}</span>` : ''}</div>
       <div class="kv"><div><small>Oferta / año</small><b>${U.money(o.salary)}</b></div><div><small>Intentos</small><b>${o.attempts}/3</b></div></div>
       <label class="f" style="margin-top:12px">Pedir sueldo (rango ${U.money(o.salary)} – ${U.money(hi)})
         <input type="range" id="neg-${o.id}" min="${o.salary}" max="${hi}" step="500" value="${val}" data-neg="${o.id}">
@@ -943,8 +1023,13 @@
       }
       after(RC.EV.resolve(S, m.id, +d.i));
     },
-    talk: (d) => { G.modal = talkModal(d.v); RC.render(); },
-    talkDo: (d) => { G.modal = null; after(RC.EV.contact(G.S, d.v, d.k)); },
+    talk: (d) => { G.talkBack = d.back || null; G.modal = talkModal(d.v); RC.render(); },
+    talkDo: (d) => { G.modal = G.talkBack ? teamModal(G.talkBack) : null; after(RC.EV.contact(G.S, d.v, d.k)); },
+    talkBack: () => { G.modal = G.talkBack ? teamModal(G.talkBack) : null; RC.render(); },
+    team: (d) => { G.modal = teamModal(d.v); RC.render(); },
+    offerSelfT: (d) => { G.modal = null; after(P.offerSelf(G.S, d.v)); },
+    mundoView: (d) => { G.mundoView = d.v; RC.render(); },
+    statSort: (d) => { G.statSort = d.v; RC.render(); },
     reqOpen: () => { G.reqCands = {}; G.reqRole = C.ROLES.find((r) => r !== G.S.pl.role); G.modal = reqModal; RC.render(); },
     reqRole: (d) => { G.reqRole = d.v; RC.render(); },
     reqDo: (d) => { G.modal = null; after(RC.EV.request(G.S, d.v)); },
@@ -1062,7 +1147,7 @@
           <button class="opt-btn" data-act="talkDo" data-v="${pid}" data-k="ask" ${can && t ? '' : 'disabled'}><span>Preguntarle si en ${t ? esc(t.name) : 'su equipo'} te querrían</span><span class="badge gold">Oferta</span></button>
           <button class="opt-btn" data-act="talkDo" data-v="${pid}" data-k="friend" ${can ? '' : 'disabled'}><span>Charlar y hacer buenas migas</span><span class="badge win">Relación</span></button>
         </div>
-        <div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn" data-act="closeModal">Cerrar</button></div>`;
+        <div class="row" style="justify-content:flex-end;margin-top:12px">${G.talkBack ? '<button class="btn" data-act="talkBack">Volver al equipo</button>' : ''}<button class="btn" data-act="closeModal">Cerrar</button></div>`;
     };
   }
 
@@ -1154,6 +1239,7 @@
       if (b === 'compLeague') { G.compLeague = el.value; G.ligaRound = null; }
       if (b === 'marketLeague') G.marketLeague = el.value;
       if (b === 'impSlot') { G.impSlot = +el.value; return; }
+      if (b === 'teamsLeague') G.teamsLeague = el.value;
       RC.render();
     });
     document.addEventListener('change', (ev) => {
