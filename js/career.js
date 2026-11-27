@@ -851,6 +851,9 @@
     }
     pl.peakOvr = Math.max(pl.peakOvr, P.ovr(S));
     if (!S.over) RC.EV.tick(S, report);
+    // Punto de partida de la nueva semana para mostrar lo que mejoras
+    pl.attrsTurn = Object.assign({}, pl.attrs);
+    pl.ovrTurn = P.ovr(S);
     report.events.push(...P.checkAchievements(S));
     S.lastReport = report;
     return report;

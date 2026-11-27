@@ -240,7 +240,7 @@
             <div class="row"><span class="small muted">Quedan</span><div class="pips">${Array.from({ length: P.actionsPerTurn(S) }, (_, i) => `<i class="${i < left ? 'on' : ''}"></i>`).join('')}</div></div></div>
           <div class="actions-grid">${acts.map((a) => actionCard(S, a, left)).join('')}</div>
           <div class="row" style="margin-top:16px;justify-content:space-between">
-            <span class="small muted">${left > 0 ? `Te quedan ${left} acciones. Puedes avanzar igualmente.` : 'Has usado todas tus acciones.'}</span>
+            <span class="small muted">${left > 0 ? `${left === 1 ? "Te queda 1 acción" : `Te quedan ${left} acciones`}. Puedes avanzar igualmente.` : 'Has usado todas tus acciones.'}</span>
             <button class="btn primary lg" data-act="advance">${S.amateur ? 'Avanzar mes' : fx && !fx.bye && fx.a ? 'Jugar jornada' : 'Avanzar semana'}</button>
           </div>
         </div>
@@ -254,6 +254,7 @@
           <div class="attr"><span>Rango</span><span class="small">${esc(P.rankInfo(pl.lp).name)}</span><span class="v small">${P.rankInfo(pl.lp).lp} LP</span></div>
           <div class="attr"><span>Fama</span><span class="small">${esc(P.fame(S).name)}</span><span class="v small">${U.num(pl.fans)}</span></div>
         </div>
+        ${attrsPanel(S)}
         ${budgetPanel(S)}
         <div class="panel"><div class="panel-h"><h2>Noticias</h2></div>
           <div class="feed">${S.news.slice(0, 14).map((n) => `<div class="${n.kind}"><small>${esc(n.when)}</small>${esc(n.text)}</div>`).join('') || '<div class="muted">Sin noticias todavía.</div>'}</div></div>
@@ -274,6 +275,19 @@
       const pct = now ? ((S.turn - idx[0]) / idx.length) * 100 : past ? 100 : 0;
       return `<div class="st ${now ? 'now' : past ? 'past' : ''} ${ph}" style="flex:${days}"><i style="width:${pct}%"></i><span>${n}</span></div>`;
     }).join('')}</div>`;
+  }
+
+  // Atributos en Inicio, con lo que has mejorado esta semana
+  function attrsPanel(S) {
+    const pl = S.pl;
+    const base = pl.attrsTurn || pl.attrs;
+    const sub = P.sub(S);
+    const ovrStart = pl.ovrTurn != null ? pl.ovrTurn : P.ovr(S);
+    const dOvr = P.ovr(S) - ovrStart;
+    return `<div class="panel"><div class="panel-h"><h2>Atributos</h2><span class="row"><span class="ovr sm">${P.ovr(S).toFixed(1)}</span>${dOvr >= 0.05 ? `<span class="small good num">+${dOvr.toFixed(2)}</span>` : ''}</span></div>
+      ${C.ATTRS.map((a) => { const d = pl.attrs[a.id] - (base[a.id] != null ? base[a.id] : pl.attrs[a.id]); return `<div class="attr at-mini" title="${esc(a.desc)}"><span>${a.name}</span>${bar(pl.attrs[a.id])}<span class="v">${pl.attrs[a.id].toFixed(1)}${Math.abs(d) >= 0.05 ? `<small class="${d > 0 ? 'good' : 'bad'}">${d > 0 ? '+' : ''}${d.toFixed(1)}</small>` : ''}</span></div>`; }).join('')}
+      <div class="row small muted" style="margin-top:8px;gap:14px"><span>Mecánica <b class="num" style="color:var(--bright)">${sub.mech.toFixed(1)}</b></span><span>Macro <b class="num" style="color:var(--bright)">${sub.macro.toFixed(1)}</b></span><span>Mental <b class="num" style="color:var(--bright)">${sub.ment.toFixed(1)}</b></span></div>
+      <p class="small muted" style="margin:6px 0 0">En verde, lo que has mejorado ${S.amateur ? 'este mes' : 'esta semana'}.</p></div>`;
   }
 
   function budgetPanel(S) {
