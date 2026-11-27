@@ -1,20 +1,25 @@
 /* Interfaz: todas las pantallas del juego. */
 (function (RC) {
   const { U, C, D, W, P, Season } = RC;
-  const G = (RC.G = { S: null, tab: 'inicio', create: null, compLeague: null, marketLeague: null, champQuery: '', champRole: null, modal: null, negAmount: {}, importText: '', confirmNew: false });
-  const SAVE_KEY = 'rc_save_v1';
+  const G = (RC.G = { S: null, tab: 'inicio', create: null, compLeague: null, marketLeague: null, champQuery: '', champRole: null, modal: null, negAmount: {}, importText: '', confirmNew: false, slot: 1, impSlot: 1 });
+  // Tres espacios de guardado. La partida del formato antiguo pasa al espacio 1.
+  const OLD_KEY = 'rc_save_v1';
+  RC.SLOTS = [1, 2, 3];
+  const slotKey = (n) => 'rc_slot_' + n;
+  try { if (localStorage.getItem(OLD_KEY) && !localStorage.getItem(slotKey(1))) { localStorage.setItem(slotKey(1), localStorage.getItem(OLD_KEY)); localStorage.removeItem(OLD_KEY); } } catch (e) { /* sin almacenamiento */ }
   const $app = () => document.getElementById('app');
   const esc = U.esc;
 
   // ---------- Guardado ----------
   RC.save = function () {
     if (!G.S) return;
-    try { localStorage.setItem(SAVE_KEY, JSON.stringify(G.S)); } catch (e) { /* sin almacenamiento */ }
+    try { localStorage.setItem(slotKey(G.slot), JSON.stringify(G.S)); } catch (e) { toast('No se ha podido guardar en este navegador.', true); }
   };
-  RC.loadSave = function () {
-    try { const raw = localStorage.getItem(SAVE_KEY); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
+  RC.loadSave = function (n = G.slot) {
+    try { const raw = localStorage.getItem(slotKey(n)); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
   };
-  RC.clearSave = function () { try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* nada */ } };
+  RC.clearSave = function (n = G.slot) { try { localStorage.removeItem(slotKey(n)); } catch (e) { /* nada */ } };
+  RC.firstEmptySlot = () => RC.SLOTS.find((n) => !RC.loadSave(n));
 
   // ---------- Iconos ----------
   const ICON = {
@@ -75,7 +80,6 @@
 
   // ---------- Menú ----------
   function viewMenu() {
-    const has = RC.loadSave();
     let hof = [];
     try { hof = JSON.parse(localStorage.getItem('rc_hof') || '[]'); } catch (e) { /* nada */ }
     return `<div class="wrap">
@@ -83,9 +87,10 @@
         <div class="badge gold">Simulador de carrera · League of Legends</div>
         <h1>RIFT <span>CAREER</span></h1>
         <p>No eres el mánager: eres el jugador. Entrena, mejora tu equipo, elige tus campeones, negocia contratos y llega desde la academia hasta los Worlds.</p>
-        ${has && has.pl ? `<div class="row" style="justify-content:center"><button class="btn primary lg" data-act="continue">Continuar carrera</button></div>
-          <p class="small muted">${esc(has.pl.name)} · ${has.pl.age} años · ${has.year}${has.pl.teamId && has.world && has.world.teams[has.pl.teamId] ? ' · ' + esc(has.world.teams[has.pl.teamId].name) : ''}</p>` : ''}
       </section>
+      <h2 style="text-align:center;margin-bottom:12px">Partidas guardadas</h2>
+      <div class="slots">${RC.SLOTS.map(slotCard).join('')}</div>
+      <h2 style="text-align:center;margin:32px 0 12px">Modos de juego</h2>
       <div class="mode-cards">
         <button class="mode" data-act="newMode" data-mode="pro">
           <span class="yr">2026 · 16 años</span>
@@ -104,6 +109,23 @@
       ${hof.length ? `<section class="panel" style="max-width:860px;margin:32px auto 0"><h2>Salón de la fama</h2>${hofTable(hof)}</section>` : ''}
       <p class="small muted" style="text-align:center;margin-top:40px">Proyecto personal sin ánimo de lucro. League of Legends y sus campeones son de Riot Games; los logos son de sus equipos. Plantillas basadas en MyRiftManager y Leaguepedia.</p>
     </div>`;
+  }
+
+  function slotCard(n) {
+    const S = RC.loadSave(n);
+    if (!S || !S.pl) {
+      return `<div class="slot empty"><span class="slot-n">Espacio ${n}</span><b>Vacío</b>
+        <div class="stack" style="gap:6px;margin-top:auto"><button class="btn primary sm" data-act="slotNew" data-v="${n}" data-mode="pro">Academia (2026)</button><button class="btn sm" data-act="slotNew" data-v="${n}" data-mode="kid">Desde Hierro (2018)</button></div></div>`;
+    }
+    const pl = S.pl;
+    const team = pl.teamId && S.world && S.world.teams[pl.teamId];
+    const ovr = W.ovr({ mech: 0.6 * pl.attrs.mecanicas + 0.4 * pl.attrs.farmeo, macro: 0.6 * pl.attrs.macro + 0.4 * pl.attrs.vision, ment: 0.6 * pl.attrs.mentalidad + 0.4 * pl.attrs.comunicacion });
+    const confirm = G.confirmDel === n;
+    return `<div class="slot"><span class="slot-n">Espacio ${n}${S.over ? ' · Terminada' : ''}</span>
+      <div class="row" style="gap:10px">${team ? teamLogo(team, 40) : '<span class="av">' + esc(pl.name.slice(0, 1)) + '</span>'}<div style="min-width:0"><b class="slot-name">${flag(pl.nation)} ${esc(pl.name)}</b><span class="small muted">${C.ROLE_ES[pl.role]} · ${pl.age} años · ${S.year}</span></div><span class="ovr sm" style="margin-left:auto">${ovr.toFixed(0)}</span></div>
+      <span class="small">${team ? esc(team.name) + ' · ' + esc(C.LEAGUES[team.league].name) : S.amateur ? 'Etapa amateur' : 'Sin equipo'} · ${pl.titles.length} título${pl.titles.length === 1 ? '' : 's'}</span>
+      ${confirm ? `<div class="alert red small">¿Borrar esta partida? No se puede deshacer.</div><div class="row"><button class="btn danger sm" data-act="slotDelYes" data-v="${n}">Sí, borrar</button><button class="btn sm" data-act="slotDelNo">Cancelar</button></div>`
+        : `<div class="row" style="margin-top:auto"><button class="btn primary sm" data-act="slotPlay" data-v="${n}">Continuar</button><button class="btn danger sm" data-act="slotDel" data-v="${n}">Borrar</button></div>`}</div>`;
   }
 
   function hofTable(list) {
@@ -756,14 +778,19 @@
       </div>
       <div class="panel"><div class="panel-h"><h2>Importar</h2></div>${importForm()}</div>
       <div class="panel"><div class="panel-h"><h2>Nueva carrera</h2></div>
-        ${G.confirmNew ? `<div class="alert red">Se perderá la partida actual si no la has exportado. ¿Seguro?</div><div class="row" style="margin-top:10px"><button class="btn danger" data-act="newConfirm">Sí, empezar de nuevo</button><button class="btn" data-act="newCancel">Cancelar</button></div>` : '<button class="btn danger" data-act="newAsk">Empezar una carrera nueva</button>'}
+        <p class="small">Estás jugando en el <b class="gold">espacio ${G.slot}</b>. Tus otras partidas siguen guardadas en sus espacios.</p>
+        <button class="btn" data-act="toMenu">Volver al menú de partidas</button>
+        <h3 style="margin:16px 0 8px">Guardar una copia en otro espacio</h3>
+        <p class="small muted" style="margin:0 0 8px">Útil para probar una decisión sin arriesgar tu partida.</p>
+        <div class="row">${RC.SLOTS.filter((n) => n !== G.slot).map((n) => { const o = RC.loadSave(n); return G.confirmCopy === n ? `<span class="small bad">¿Sobrescribir la partida de ${esc(o.pl.name)}?</span><button class="btn danger sm" data-act="copyYes" data-v="${n}">Sí</button><button class="btn sm" data-act="copyNo">No</button>` : `<button class="btn sm" data-act="copySlot" data-v="${n}">Espacio ${n}${o && o.pl ? ' (' + esc(o.pl.name) + ')' : ' (vacío)'}</button>`; }).join('')}</div>
       </div>
       <div class="panel"><div class="panel-h"><h2>Datos</h2></div><p class="small">Parche de iconos de Riot: ${esc(D.champVersion)} · ${Object.keys(D.champions).length} campeones · ${S.world ? Object.keys(S.world.teams).length + ' equipos' : ''}</p></div>
     </div>`;
   }
 
   function importForm() {
-    return `<p class="small">Elige un archivo de partida o pega el texto exportado.</p>
+    const pick = !G.S ? `<label class="f" style="margin-bottom:8px">Espacio de destino<select class="input" id="imp-slot" data-bind="impSlot">${RC.SLOTS.map((n) => { const o = RC.loadSave(n); return `<option value="${n}" ${n === G.impSlot ? 'selected' : ''}>Espacio ${n}${o && o.pl ? ' · sobrescribe a ' + esc(o.pl.name) : ' · vacío'}</option>`; }).join('')}</select></label>` : `<p class="small muted">Se cargará en el espacio ${G.slot} y sustituirá a la partida actual.</p>`;
+    return `${pick}<p class="small">Elige un archivo de partida o pega el texto exportado.</p>
       <input type="file" id="imp-file" accept=".json,application/json,text/plain" class="input" style="width:100%">
       <textarea class="input" id="imp-text" rows="4" style="width:100%;margin-top:8px" placeholder="Pega aquí tu partida">${esc(G.importText)}</textarea>
       <button class="btn blue" style="margin-top:8px" data-act="importText">Cargar desde el texto</button>`;
@@ -780,7 +807,7 @@
         <div><small>Media máxima</small><b>${pl.peakOvr.toFixed(1)}</b></div><div><small>Partidas</small><b>${c.g}</b></div><div><small>% victorias</small><b>${c.g ? Math.round((c.w / c.g) * 100) : 0}%</b></div>
         <div><small>Premios</small><b>${pl.awards.length}</b></div><div><small>Seguidores</small><b>${U.num(pl.fans)}</b></div></div>
         <div class="timeline" style="margin-top:16px">${pl.history.map((h) => `<div class="tl"><b>${h.year}</b><span class="tl-logos">${logosInText(h.text)}</span><span>${esc(h.text)}</span></div>`).join('')}</div>
-        <div class="row" style="margin-top:16px;justify-content:center"><button class="btn primary lg" data-act="newConfirm">Nueva carrera</button></div></div>
+        <div class="row" style="margin-top:16px;justify-content:center"><button class="btn primary lg" data-act="toMenu">Volver al menú</button></div></div>
       ${hof.length ? `<section class="panel" style="max-width:900px;margin:24px auto 0"><h2>Salón de la fama</h2>${hofTable(hof)}</section>` : ''}</div>`;
   }
 
@@ -838,8 +865,19 @@
 
   const handlers = {
     tab: (d) => { G.tab = d.v; G.confirmNew = false; RC.render(); window.scrollTo(0, 0); },
-    continue: () => { G.S = RC.migrate(RC.loadSave()); G.tab = 'inicio'; RC.render(); },
-    newMode: (d) => { G.create = { mode: d.mode, name: '', nation: 'ES', role: 'Mid', style: 'estratega', champs: [] }; RC.render(); },
+    slotPlay: (d) => { G.slot = +d.v; G.S = RC.migrate(RC.loadSave(G.slot)); G.tab = 'inicio'; G.confirmDel = null; RC.render(); window.scrollTo(0, 0); },
+    slotNew: (d) => { G.slot = +d.v; G.create = { mode: d.mode, name: '', nation: 'ES', role: 'Mid', style: 'estratega', champs: [] }; RC.render(); window.scrollTo(0, 0); },
+    slotDel: (d) => { G.confirmDel = +d.v; RC.render(); },
+    slotDelNo: () => { G.confirmDel = null; RC.render(); },
+    slotDelYes: (d) => { RC.clearSave(+d.v); G.confirmDel = null; RC.render(); toast(`Espacio ${d.v} borrado.`); },
+    toMenu: () => { RC.save(); G.S = null; G.modal = null; G.create = null; G.confirmCopy = null; RC.render(); window.scrollTo(0, 0); },
+    copySlot: (d) => { const n = +d.v; if (RC.loadSave(n)) { G.confirmCopy = n; RC.render(); return; } copyTo(n); },
+    copyYes: (d) => copyTo(+d.v),
+    copyNo: () => { G.confirmCopy = null; RC.render(); },
+    newMode: (d) => {
+      const n = RC.firstEmptySlot();
+      if (!n) { toast('Los 3 espacios están ocupados. Borra uno para empezar otra carrera.', true); return; }
+      G.slot = n; G.create = { mode: d.mode, name: '', nation: 'ES', role: 'Mid', style: 'estratega', champs: [] }; RC.render(); },
     backMenu: () => { G.create = null; RC.render(); },
     cRole: (d) => { G.create.role = d.v; G.create.champs = []; RC.render(); },
     cStyle: (d) => { G.create.style = d.v; RC.render(); },
@@ -940,9 +978,7 @@
     },
     importOpen: () => { G.modal = () => `<h2>Importar partida</h2>${importForm()}<div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn" data-act="closeModal">Cerrar</button></div>`; RC.render(); },
     importText: () => { const el = document.getElementById('imp-text'); doImport(el ? el.value : ''); },
-    newAsk: () => { G.confirmNew = true; RC.render(); },
-    newCancel: () => { G.confirmNew = false; RC.render(); },
-    newConfirm: () => { RC.clearSave(); G.S = null; G.confirmNew = false; G.modal = null; G.create = null; RC.render(); },
+
   };
 
   function doAdvance() {
@@ -1035,10 +1071,17 @@
     RC.render();
   }
 
+  function copyTo(n) {
+    try { localStorage.setItem(slotKey(n), JSON.stringify(Object.assign({}, G.S, { id: U.uid() }))); toast(`Copia guardada en el espacio ${n}.`); } catch (e) { toast('No se ha podido guardar la copia.', true); }
+    G.confirmCopy = null;
+    RC.render();
+  }
+
   function doImport(text) {
     try {
       const S = JSON.parse(text);
       if (!S || !S.pl || !S.cal) throw new Error('formato');
+      if (!G.S) G.slot = G.impSlot || 1;
       G.S = RC.migrate(S);
       G.modal = null;
       G.importText = '';
@@ -1094,6 +1137,7 @@
       if (b === 'champRole') { G.champRole = el.value; G.champQuery = ''; }
       if (b === 'compLeague') { G.compLeague = el.value; G.ligaRound = null; }
       if (b === 'marketLeague') G.marketLeague = el.value;
+      if (b === 'impSlot') { G.impSlot = +el.value; return; }
       RC.render();
     });
     document.addEventListener('change', (ev) => {

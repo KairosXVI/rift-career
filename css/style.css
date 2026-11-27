@@ -438,3 +438,12 @@ h2.sec { margin: 22px 0 10px; }
 .tl-logos:empty { display: none; }
 .contract { align-items: center; }
 .contract .kv { grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); }
+
+/* ---------- Espacios de guardado ---------- */
+.slots { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); max-width: 900px; margin: 0 auto; }
+.slot { display: flex; flex-direction: column; gap: 10px; padding: 16px; min-height: 170px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); min-width: 0; }
+.slot.empty { border-style: dashed; border-color: var(--line2); }
+.slot-n { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--gold); }
+.slot.empty b { color: var(--dim); font-family: var(--f-display); font-size: 18px; }
+.slot-name { display: block; color: var(--bright); font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slot .small.muted { display: block; }

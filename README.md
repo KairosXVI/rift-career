@@ -38,6 +38,9 @@ Las ofertas llegan en pretemporada, durante el MSI y después de los Worlds. Pue
 ### Fin de la carrera
 Puedes retirarte desde los 27 años. A partir de esa edad los atributos bajan cada año. Si pasas un año entero sin equipo, la carrera termina. Las carreras acabadas se guardan en el Salón de la fama.
 
+### Partidas
+Hay 3 espacios de guardado. Cada partida se guarda sola en su espacio después de cada acción. Desde la pestaña Partida puedes guardar una copia en otro espacio, exportarla a un archivo o importarla.
+
 ## Datos
 - Plantillas y valoraciones (mecánica, macro, mentalidad) de 889 jugadores: MyRiftManager.
 - Iconos de campeones: Riot Data Dragon.
