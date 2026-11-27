@@ -232,7 +232,7 @@
     const offersAlert = S.offers.length ? `<div class="alert">Tienes ${S.offers.length} oferta${S.offers.length > 1 ? 's' : ''} de contrato. <button class="btn sm" data-act="tab" data-v="mercado">Ver ofertas</button></div>` : '';
     const sponsorAlert = S.sponsorOffers.length ? `<div class="alert blue">${S.sponsorOffers.length} marca${S.sponsorOffers.length > 1 ? 's quieren' : ' quiere'} patrocinarte. <button class="btn sm" data-act="tab" data-v="patrocinios">Ver</button></div>` : '';
     const promo = P.pendingPromos(S) ? `<div class="alert red">Te quedan ${P.pendingPromos(S)} acciones publicitarias este split. Si no las cumples, el patrocinador se irá.</div>` : '';
-    return `${S.amateur ? '' : seasonStrip(S)}<div class="main-grid" style="margin-top:16px">
+    return `${seasonStrip(S, true)}<div class="main-grid" style="margin-top:16px">
       <div class="stack">
         ${match}
         <div class="panel">
@@ -262,8 +262,10 @@
     </div>`;
   }
 
-  function seasonStrip(S) {
+  function seasonStrip(S, compact) {
     if (S.amateur) {
+      const months = `<div class="strip">${C.MONTHS.map((m, i) => `<div class="st ${i < S.turn ? 'past' : i === S.turn ? 'now' : ''}" style="flex:1"><span>${m.slice(0, 3)}</span></div>`).join('')}</div>`;
+      if (compact) return `<div class="strip-row"><span class="strip-lbl">${S.year} · ${S.pl.age} años</span>${months}</div>`;
       return `<div class="panel"><h2 style="margin-bottom:10px">${S.year} · ${S.pl.age} años</h2><div class="strip">${C.MONTHS.map((m, i) => `<div class="st ${i < S.turn ? 'past' : i === S.turn ? 'now' : ''}" style="flex:1"><span>${m.slice(0, 3)}</span></div>`).join('')}</div></div>`;
     }
     const parts = [['pre', 'Pre'], ['winter', 'Winter'], ['spring', 'Spring'], ['msi', 'MSI'], ['summer', 'Summer'], ['worlds', 'Worlds'], ['off', 'Mercado']];
